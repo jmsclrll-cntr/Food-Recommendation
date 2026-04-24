@@ -1,9 +1,10 @@
-// index.js
 require('dotenv').config(); // Load variables at the very start
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const authRoutes = require('./routes/authRoutes');
+// --- NEW: Added for Step 5 ---
+const recommendationRoutes = require('./routes/recommendationRoutes'); 
 
 // Redundant but kept as per your existing code
 dotenv.config();
@@ -35,6 +36,13 @@ app.get('/', (req, res) => {
  */
 app.use('/api/auth', authRoutes);
 
+// --- NEW: Added for Step 5 ---
+/**
+ * Prefix all recommendation routes with /api/recommendations
+ * This handles /api/recommendations/predict
+ */
+app.use('/api/recommendations', recommendationRoutes);
+
 // --- ERROR HANDLING ---
 
 /**
@@ -60,5 +68,7 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`✅ Auth routes available at http://localhost:${PORT}/api/auth`);
+    // --- NEW: Added for Step 5 ---
+    console.log(`✅ Recommendation routes available at http://localhost:${PORT}/api/recommendations`);
     console.log(`-----------------------------------------`);
 });
