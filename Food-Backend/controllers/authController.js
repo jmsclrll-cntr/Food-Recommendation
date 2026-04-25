@@ -2,93 +2,95 @@ const { auth, db } = require('../config/firebase');
 const axios = require('axios');
 require('dotenv').config();
 
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
-
-// --- REGISTER (Email/Password) ---
+// --- REGISTER ---
 const register = async (req, res) => {
     try {
         const { email, password, username } = req.body;
-        if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
-        // Create user in Firebase AUTH
+        // 1. Better Validation
+        if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
+        
+        // 2. FIRESTORE FIX: Ensure username is NEVER undefined
+        const finalUsername = username || email.split('@')[0] || "New User";
+
+        // 3. Create user in Firebase AUTH
         const userRecord = await auth.createUser({
             email,
             password,
-            displayName: username,
+            displayName: finalUsername,
         });
 
-        // Save user data to FIRESTORE
+        // 4. Save to Firestore (Fail-safe)
         await db.collection('users').doc(userRecord.uid).set({
             uid: userRecord.uid,
-            username: username,
+            username: finalUsername,
             email: email,
             createdAt: new Date().toISOString(),
             role: "user",
             authMethod: "email"
         });
 
-        res.status(201).json({ 
-            message: "User created and saved to database!", 
-            uid: userRecord.uid 
-        });
+        res.status(201).json({ message: "Account created successfully!" });
     } catch (error) {
-        console.error("Register Error:", error.message);
-        res.status(400).json({ error: error.message });
+        console.error("Register Error:", error.code);
+        // Better error handling for UI
+        let message = "Registration failed";
+        if (error.code === 'auth/email-already-exists') message = "This email is already registered.";
+        if (error.code === 'auth/invalid-password') message = "Password must be at least 6 characters.";
+        
+        res.status(400).json({ error: message });
     }
 };
 
-// --- LOGIN (Email/Password) ---
+// --- LOGIN ---
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+        const API_KEY = process.env.FIREBASE_API_KEY;
 
-        if (!FIREBASE_API_KEY) {
-            return res.status(500).json({ error: "Backend cannot read .env file. Check folder structure." });
-        }
+        if (!API_KEY) return res.status(500).json({ error: "Server Configuration Error: API Key missing" });
 
-        const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+        const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`;
         const response = await axios.post(signInUrl, { email, password, returnSecureToken: true });
 
         res.json({ 
             message: "Success", 
             token: response.data.idToken, 
             user: { 
-                username: response.data.displayName, 
+                username: response.data.displayName || "User", 
                 email: response.data.email, 
                 uid: response.data.localId 
             } 
         });
     } catch (error) {
-        console.error("Firebase Error Body:", error.response?.data);
-        res.status(401).json({ error: error.response?.data?.error?.message || "Login failed" });
+        const firebaseError = error.response?.data?.error?.message;
+        let message = "Login failed";
+        if (firebaseError === 'EMAIL_NOT_FOUND' || firebaseError === 'INVALID_PASSWORD') {
+            message = "Invalid email or password.";
+        }
+        res.status(401).json({ error: message });
     }
 };
 
-// --- GOOGLE LOGIN (Social Auth) ---
+// --- GOOGLE LOGIN ---
 const googleLogin = async (req, res) => {
     try {
-        const { idToken } = req.body; // Received from frontend
-        
-        if (!idToken) {
-            return res.status(400).json({ error: "No Google token provided" });
-        }
+        const { idToken } = req.body;
+        if (!idToken) return res.status(400).json({ error: "No Google token provided" });
 
-        // 1. Verify the Google Token using Firebase Admin SDK
         const decodedToken = await auth.verifyIdToken(idToken);
         const { uid, email, name, picture } = decodedToken;
 
-        // 2. Check if user already exists in Firestore
         const userRef = db.collection('users').doc(uid);
         const userDoc = await userRef.get();
 
         let userData;
 
         if (!userDoc.exists) {
-            // 3. If user is new, create the document in Firestore
+            // Ensure values are never undefined for Firestore
             userData = {
                 uid: uid,
-                username: name || email.split('@')[0],
+                username: name || email.split('@')[0] || "Google User",
                 email: email,
                 profilePic: picture || "",
                 createdAt: new Date().toISOString(),
@@ -96,14 +98,10 @@ const googleLogin = async (req, res) => {
                 authMethod: "google"
             };
             await userRef.set(userData);
-            console.log("New Google user registered in Firestore:", uid);
         } else {
-            // 4. If user exists, fetch existing data from Firestore
             userData = userDoc.data();
-            console.log("Existing Google user logged in:", uid);
         }
 
-        // 5. Send back success response
         res.json({ 
             message: "Success",
             token: idToken, 
@@ -114,17 +112,9 @@ const googleLogin = async (req, res) => {
                 profilePic: userData.profilePic 
             } 
         });
-
     } catch (error) {
-        console.error("Google Login Error:", error.message);
-        res.status(401).json({ error: "Invalid Google Token or Database error" });
+        res.status(401).json({ error: "Google Auth Failed" });
     }
 };
 
-// EXPORT ALL FUNCTIONS
-// Ensure these names match exactly with your routes/authRoutes.js
-module.exports = {
-    register,
-    login,
-    googleLogin
-};
+module.exports = { register, login, googleLogin };
