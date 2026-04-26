@@ -6,7 +6,17 @@ const Signup = () => {
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
   const navigate = useNavigate();
 
-  // --- UI ONLY: Typewriter Effect ---
+  // --- UI State: The Aesthetic Pulse ---
+  const [isInverted, setIsInverted] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsInverted(prev => !prev);
+    }, 4500); 
+    return () => clearInterval(interval);
+  }, []);
+
+  // --- UI Logic: Typewriter Effect ---
   const [displayText, setDisplayText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [loopNum, setLoopNum] = useState(0);
@@ -35,130 +45,101 @@ const Signup = () => {
   };
 
   return (
-    /* BACKGROUND: GEOMETRIC CUBES */
-    <div className="custom-cursor min-h-screen bg-[#1b4332] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] flex items-center justify-center p-4 font-sans selection:bg-[#95d5b2] selection:text-[#1b4332]">
+    /* RESTORED: ORIGINAL BACKGROUND COLOR AND CUBE TEXTURE */
+    <div className="custom-cursor min-h-screen bg-[#1b4332] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] flex items-center justify-center p-6 font-sans selection:bg-[#95d5b2] selection:text-[#1b4332]">
       
-      {/* CLEAN UI ENGINE */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-cursor {
           cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black' stroke='white' stroke-width='2'/%3E%3C/svg%3E"), auto;
         }
-        
-        input { caret-color: #95d5b2 !important; }
 
-        @keyframes float-header {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-15px); }
+        .aesthetic-transition {
+          transition: all 1.8s cubic-bezier(0.77, 0, 0.175, 1);
         }
-        .animate-float { animation: float-header 5s ease-in-out infinite; }
 
-        /* THE CLEAN PORTAL CONTAINER */
-        .portal-container {
+        /* UNIVERSAL FILL ANIMATION CLASS */
+        .portal-fill-box {
           position: relative;
-          background: #fcfdfc;
-          border-radius: 16px 16px 4px 4px;
-          overflow: hidden; /* Stops fill from leaking */
-          transition: all 0.4s ease;
-          border-bottom: 2px solid #edf2ed;
+          overflow: hidden;
+          z-index: 1;
         }
 
-        /* THE RISING GREEN FILL (BEHIND CONTENT) */
-        .portal-container::before {
+        .portal-fill-box::before {
           content: '';
           position: absolute;
           bottom: 0; left: 0; width: 100%; height: 0%;
-          background: #1b4332; /* Forest Green Abyss */
-          z-index: 0;
-          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          z-index: -1;
+          transition: all 0.6s cubic-bezier(0.77, 0, 0.175, 1);
         }
 
-        /* ACTIVE STATES */
-        .portal-active::before {
+        .portal-fill-box:hover::before {
           height: 100%;
         }
-        .portal-active {
-          border-bottom: 2px solid #95d5b2;
-          box-shadow: 0 10px 30px -10px rgba(27,67,50,0.3);
-          transform: translateY(-2px);
-        }
 
-        /* CONTENT LAYER (STAYS ON TOP) */
-        .portal-content {
-          position: relative;
-          z-index: 10;
-        }
+        .fill-dark-green::before { background: #1b4332; }
+        .fill-mint::before { background: #95d5b2; }
+        .fill-white::before { background: #ffffff; }
 
-        .portal-btn-abyss {
-          position: relative;
-          z-index: 1;
-          overflow: hidden;
-          transition: all 0.4s ease;
+        @keyframes subtle-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
         }
-        .portal-btn-abyss::before {
-          content: '';
-          position: absolute;
-          bottom: 0; left: 0; width: 100%; height: 0%;
-          background: #1b4332;
-          z-index: -1;
-          transition: all 0.4s ease;
-        }
-        .portal-btn-abyss:hover::before { height: 100%; }
+        .animate-subtle-float { animation: subtle-float 6s ease-in-out infinite; }
       `}} />
 
-      <div className="relative w-full max-w-[1100px] min-h-[750px] bg-white rounded-[60px] shadow-[0_80px_150px_-30px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col md:flex-row">
+      <div className="relative w-full max-w-[1150px] min-h-[780px] bg-[#fcfdfc] rounded-[70px] shadow-[0_100px_180px_-40px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col md:flex-row aesthetic-transition">
         
-        {/* LEFT PANEL: BRANDING */}
-        <div className="relative w-full md:w-[40%] bg-[#1b4332] p-16 flex flex-col items-center justify-center overflow-hidden text-center">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#2d6a4f_0%,_transparent_70%)] opacity-30 animate-pulse"></div>
-          
-          <div className="relative z-10">
-            <div className="w-24 h-24 bg-white/10 backdrop-blur-3xl border border-white/20 rounded-[35px] flex items-center justify-center mx-auto mb-10 shadow-2xl">
-               <img src="/src/assets/hero.png" alt="Logo" className="w-12 h-12 object-contain brightness-0 invert" />
+        {/* LEFT PANEL */}
+        <div className={`relative w-full md:w-[42%] p-20 flex flex-col items-center justify-center overflow-hidden text-center aesthetic-transition ${isInverted ? 'bg-[#fcfdfc]' : 'bg-[#1b4332]'}`}>
+          <div className="relative z-10 animate-subtle-float">
+            <div className={`w-28 h-28 rounded-[40px] flex items-center justify-center mx-auto mb-12 aesthetic-transition border shadow-2xl
+              ${isInverted ? 'bg-[#1b4332]/5 border-[#1b4332]/10 backdrop-blur-md' : 'bg-white/10 border-white/20 backdrop-blur-xl'}`}>
+               <img src="/src/assets/hero.png" alt="Logo" className={`w-14 h-14 object-contain transition-all duration-1000 ${isInverted ? 'brightness-100 opacity-80' : 'brightness-0 invert opacity-90'}`} />
             </div>
-            <h1 className="text-6xl font-black text-white tracking-tighter italic mb-4">Foodie<span className="text-[#95d5b2]">.</span></h1>
-            <p className="text-[#95d5b2] text-xl font-light tracking-[5px] uppercase">{displayText}</p>
+
+            <h1 className={`text-7xl font-black tracking-tighter italic mb-6 aesthetic-transition ${isInverted ? 'text-[#1b4332]' : 'text-white'}`}>
+              Foodie<span className="text-[#95d5b2]">.</span>
+            </h1>
+            <p className="text-[#95d5b2] text-sm font-medium tracking-[8px] uppercase opacity-80">{displayText}</p>
           </div>
 
-          <div className="absolute top-0 bottom-0 -right-1 w-32 hidden md:block">
-            <svg className="h-full w-full fill-white" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M0 0 C 100 0 20 50 100 100 L 100 100 L 100 0 Z" />
+          <div className="absolute top-0 bottom-0 -right-1 w-36 hidden md:block">
+            <svg className={`h-full w-full aesthetic-transition ${isInverted ? 'fill-[#1b4332]' : 'fill-[#fcfdfc]'}`} viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path d="M0 0 C 100 0 15 50 100 100 L 100 100 L 100 0 Z" />
             </svg>
           </div>
         </div>
 
-        {/* RIGHT PANEL: CLEAN FORM */}
-        <div className="w-full md:w-[60%] p-10 md:p-20 bg-white flex flex-col justify-center">
-          <div className="max-w-[400px] mx-auto w-full">
+        {/* RIGHT PANEL */}
+        <div className={`w-full md:w-[58%] p-12 md:p-24 flex flex-col justify-center aesthetic-transition ${isInverted ? 'bg-[#1b4332]' : 'bg-[#fcfdfc]'}`}>
+          <div className="max-w-[420px] mx-auto w-full">
             
-            {/* FLOATING HEADER */}
-            <header className="mb-14 flex flex-col items-center md:items-start">
-              <div className="animate-float text-center md:text-left">
-                <h2 className="text-7xl font-black text-[#1b4332] tracking-tighter leading-none italic uppercase">BEGIN</h2>
-                <h2 className="text-7xl font-black text-[#1b4332] tracking-tighter leading-none italic mt-1 uppercase">JOURNEY</h2>
+            <header className="mb-16 flex flex-col items-center md:items-start">
+              <div className="text-center md:text-left">
+                <h2 className={`text-7xl font-black tracking-tighter leading-[0.85] italic uppercase aesthetic-transition ${isInverted ? 'text-white' : 'text-[#1b4332]'}`}>BEGIN</h2>
+                <h2 className={`text-7xl font-black tracking-tighter leading-[0.85] italic uppercase aesthetic-transition ${isInverted ? 'text-white' : 'text-[#1b4332]'}`}>JOURNEY</h2>
               </div>
-              <div className="h-[3px] w-14 bg-[#95d5b2] mt-6 rounded-full shadow-lg"></div>
+              <div className="h-[4px] w-16 bg-[#95d5b2] mt-8 rounded-full shadow-[0_0_15px_rgba(149,213,178,0.6)]"></div>
             </header>
 
-            <form onSubmit={handleSignup} className="space-y-8">
-              
-              {/* DYNAMIC SURGICAL INPUTS */}
+            <form onSubmit={handleSignup} className="space-y-6">
               {['username', 'email', 'password'].map((field) => {
-                const hasValue = formData[field].length > 0;
                 const labels = { username: 'Identity', email: 'Email Access', password: 'Security Key' };
-                
                 return (
-                  <div key={field} className={`portal-container ${hasValue ? 'portal-active' : 'focus-within:portal-active'}`}>
-                    <div className="portal-content px-6 py-4">
-                      <label className={`block transition-all duration-500 font-black uppercase mb-1
-                        ${hasValue ? 'text-[#95d5b2] text-[10px] tracking-[3px]' : 'text-gray-400 text-[10px] tracking-widest'}`}>
+                  <div key={field} 
+                    className={`portal-fill-box group rounded-2xl aesthetic-transition 
+                      ${isInverted ? 'bg-[#0a1a13] fill-mint' : 'bg-gray-100 fill-dark-green'}`}>
+                    
+                    <div className="px-8 py-5">
+                      <label className={`block transition-all duration-500 font-bold uppercase mb-1 text-[10px] tracking-[4px]
+                        ${isInverted ? 'text-[#95d5b2] group-hover:text-[#1b4332]' : 'text-gray-400 group-hover:text-[#95d5b2]'}`}>
                         {labels[field]}
                       </label>
                       <input 
                         type={field === 'password' ? 'password' : 'text'} 
                         required 
-                        placeholder={hasValue ? "" : `Enter ${labels[field]}`}
-                        className={`w-full bg-transparent outline-none font-bold transition-all duration-500 py-1
-                          ${hasValue ? 'text-white' : 'text-gray-700'}`}
+                        className={`w-full bg-transparent outline-none font-bold text-lg transition-all duration-500
+                          ${isInverted ? 'text-white group-hover:text-[#1b4332]' : 'text-[#1b4332] group-hover:text-white'}`}
                         onChange={(e) => setFormData({...formData, [field]: e.target.value})}
                       />
                     </div>
@@ -166,13 +147,21 @@ const Signup = () => {
                 );
               })}
 
-              <div className="pt-6 space-y-5">
-                <button type="submit" className="relative w-full py-6 bg-[#1b4332] text-[#95d5b2] rounded-[24px] font-black text-xs uppercase tracking-[6px] transition-all duration-500 hover:bg-[#2d6a4f] hover:text-white hover:shadow-2xl active:scale-95">
-                   CONFIRM ACCESS
+              <div className="pt-8 space-y-6">
+                <button type="submit" 
+                  className={`portal-fill-box group w-full py-7 rounded-[30px] font-black text-[11px] uppercase tracking-[8px] aesthetic-transition shadow-2xl active:scale-95
+                  ${isInverted ? 'bg-white text-[#1b4332] fill-mint' : 'bg-[#1b4332] text-[#95d5b2] fill-white'}`}>
+                   <span className={`transition-colors duration-500 ${isInverted ? 'group-hover:text-white' : 'group-hover:text-[#1b4332]'}`}>
+                    CONFIRM ACCESS
+                   </span>
                 </button>
 
-                <Link to="/" className="portal-btn-abyss block w-full py-6 border-2 border-gray-100 text-gray-400 rounded-[24px] font-black text-xs uppercase tracking-[6px] text-center hover:text-[#95d5b2] hover:border-[#1b4332]">
-                  BACK TO PORTAL
+                <Link to="/" 
+                  className={`portal-fill-box group block w-full py-6 rounded-[30px] font-black text-[10px] uppercase tracking-[6px] text-center border-2 aesthetic-transition
+                  ${isInverted ? 'border-white/10 text-white/60 fill-white' : 'border-gray-100 text-gray-400 fill-dark-green'}`}>
+                  <span className={`transition-colors duration-500 ${isInverted ? 'group-hover:text-[#1b4332]' : 'group-hover:text-white'}`}>
+                    BACK TO PORTAL
+                  </span>
                 </Link>
               </div>
             </form>
