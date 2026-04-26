@@ -6,13 +6,13 @@ const Signup = () => {
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
   const navigate = useNavigate();
 
-  // --- UI State: The Aesthetic Pulse ---
+  // --- UI State: The Aesthetic Swapping (Slowed to 10s) ---
   const [isInverted, setIsInverted] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setIsInverted(prev => !prev);
-    }, 4500); 
+    }, 10000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -45,8 +45,7 @@ const Signup = () => {
   };
 
   return (
-    /* RESTORED: ORIGINAL BACKGROUND COLOR AND CUBE TEXTURE */
-    <div className="custom-cursor min-h-screen bg-[#1b4332] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] flex items-center justify-center p-6 font-sans selection:bg-[#95d5b2] selection:text-[#1b4332]">
+    <div className="custom-cursor min-h-screen bg-[#1b4332] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] flex items-center justify-center p-6 font-sans selection:bg-[#95d5b2] selection:text-[#1b4332] overflow-hidden">
       
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-cursor {
@@ -54,10 +53,44 @@ const Signup = () => {
         }
 
         .aesthetic-transition {
-          transition: all 1.8s cubic-bezier(0.77, 0, 0.175, 1);
+          transition: all 2.5s cubic-bezier(0.77, 0, 0.175, 1);
         }
 
-        /* UNIVERSAL FILL ANIMATION CLASS */
+        /* NEW: FLOATING HEADER ANIMATION */
+        @keyframes float-levitate {
+          0%, 100% { transform: translateY(0); filter: drop-shadow(0 5px 15px rgba(0,0,0,0.1)); }
+          50% { transform: translateY(-15px); filter: drop-shadow(0 25px 25px rgba(0,0,0,0.1)); }
+        }
+        .animate-float-header {
+          animation: float-levitate 5s ease-in-out infinite;
+        }
+
+        /* LIQUID LOOP ANIMATION FOR THE LINE */
+        @keyframes liquid-slide-long {
+          0% { transform: translateX(-100%) scaleX(0.3); opacity: 0; }
+          15% { opacity: 1; }
+          50% { transform: translateX(100%) scaleX(2.5); }
+          85% { opacity: 1; }
+          100% { transform: translateX(400%) scaleX(0.3); opacity: 0; }
+        }
+        .animate-liquid-long {
+          animation: liquid-slide-long 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+        }
+
+        /* GLASS SHIMMER EFFECT */
+        @keyframes shimmer {
+          0% { transform: translateX(-150%) skewX(-20deg); }
+          100% { transform: translateX(250%) skewX(-20deg); }
+        }
+        .shimmer-layer {
+          position: absolute;
+          top: 0; left: 0; width: 40%; height: 100%;
+          background: linear-gradient(to right, transparent, rgba(255,255,255,0.1), transparent);
+          animation: shimmer 8s infinite linear;
+          pointer-events: none;
+          z-index: 50;
+        }
+
         .portal-fill-box {
           position: relative;
           overflow: hidden;
@@ -72,10 +105,7 @@ const Signup = () => {
           transition: all 0.6s cubic-bezier(0.77, 0, 0.175, 1);
         }
 
-        .portal-fill-box:hover::before {
-          height: 100%;
-        }
-
+        .portal-fill-box:hover::before { height: 100%; }
         .fill-dark-green::before { background: #1b4332; }
         .fill-mint::before { background: #95d5b2; }
         .fill-white::before { background: #ffffff; }
@@ -87,8 +117,11 @@ const Signup = () => {
         .animate-subtle-float { animation: subtle-float 6s ease-in-out infinite; }
       `}} />
 
-      <div className="relative w-full max-w-[1150px] min-h-[780px] bg-[#fcfdfc] rounded-[70px] shadow-[0_100px_180px_-40px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col md:flex-row aesthetic-transition">
+      <div className="relative w-full max-w-[1150px] min-h-[780px] bg-[#fcfdfc] rounded-[70px] shadow-[0_120px_200px_-50px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col md:flex-row aesthetic-transition">
         
+        {/* Shimmer Beam */}
+        <div className="shimmer-layer"></div>
+
         {/* LEFT PANEL */}
         <div className={`relative w-full md:w-[42%] p-20 flex flex-col items-center justify-center overflow-hidden text-center aesthetic-transition ${isInverted ? 'bg-[#fcfdfc]' : 'bg-[#1b4332]'}`}>
           <div className="relative z-10 animate-subtle-float">
@@ -114,12 +147,16 @@ const Signup = () => {
         <div className={`w-full md:w-[58%] p-12 md:p-24 flex flex-col justify-center aesthetic-transition ${isInverted ? 'bg-[#1b4332]' : 'bg-[#fcfdfc]'}`}>
           <div className="max-w-[420px] mx-auto w-full">
             
-            <header className="mb-16 flex flex-col items-center md:items-start">
+            {/* NEW: ALIVE FLOATING HEADER SECTION */}
+            <header className="mb-16 flex flex-col items-center md:items-start animate-float-header">
               <div className="text-center md:text-left">
                 <h2 className={`text-7xl font-black tracking-tighter leading-[0.85] italic uppercase aesthetic-transition ${isInverted ? 'text-white' : 'text-[#1b4332]'}`}>BEGIN</h2>
                 <h2 className={`text-7xl font-black tracking-tighter leading-[0.85] italic uppercase aesthetic-transition ${isInverted ? 'text-white' : 'text-[#1b4332]'}`}>JOURNEY</h2>
               </div>
-              <div className="h-[4px] w-16 bg-[#95d5b2] mt-8 rounded-full shadow-[0_0_15px_rgba(149,213,178,0.6)]"></div>
+              
+              <div className="relative mt-10 h-[4px] w-full max-w-[320px] bg-gray-500/10 rounded-full overflow-hidden">
+                <div className="animate-liquid-long h-full w-32 bg-[#95d5b2] rounded-full shadow-[0_0_20px_rgba(149,213,178,1)]"></div>
+              </div>
             </header>
 
             <form onSubmit={handleSignup} className="space-y-6">
@@ -138,6 +175,7 @@ const Signup = () => {
                       <input 
                         type={field === 'password' ? 'password' : 'text'} 
                         required 
+                        placeholder={`Enter ${labels[field]}`}
                         className={`w-full bg-transparent outline-none font-bold text-lg transition-all duration-500
                           ${isInverted ? 'text-white group-hover:text-[#1b4332]' : 'text-[#1b4332] group-hover:text-white'}`}
                         onChange={(e) => setFormData({...formData, [field]: e.target.value})}
@@ -167,7 +205,6 @@ const Signup = () => {
             </form>
           </div>
         </div>
-
       </div>
     </div>
   );
