@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './pages/login';
 import Signup from './pages/signup';
 import Dashboard from './pages/dashboard';
-import GenerateWeekly from './pages/generateWeekly'; // Import the new file
+import GenerateWeekly from './pages/generateWeekly.jsx';
 
 function App() {
   return (
