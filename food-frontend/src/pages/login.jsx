@@ -135,10 +135,14 @@ const Login = () => {
             </AnimatePresence>
           </div>
 
-          <div className="relative z-20 grid grid-cols-3 gap-4">
-            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-[#8ecb84] pl-2 leading-none">4</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Users</p></div>
-            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-[#8ecb84] pl-2 leading-none">500+</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Meals</p></div>
-            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-[#8ecb84] pl-2 leading-none">3</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Goals</p></div>
+          <div className="relative z-20 flex justify-between items-end">
+            <div>
+              <p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-[#8ecb84] pl-2 leading-none">7-Day</p>
+              <p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Plan</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-[#6a9966] uppercase tracking-[0.12em] font-medium">Created by NutriTeam</p>
+            </div>
           </div>
         </div>
 
