@@ -1,12 +1,19 @@
 require('dotenv').config(); // Load variables at the very start
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
+const admin = require('firebase-admin'); // ADDED: Required for database connection
 const authRoutes = require('./routes/authRoutes');
 const recommendationRoutes = require('./routes/recommendationRoutes'); 
-
-// --- NEW: Import Health Routes ---
 const healthRoutes = require('./routes/healthRoutes'); 
+const { syncMLData } = require('./ml/mlDataService');
+
+// --- FIREBASE INITIALIZATION (THIS WAS THE MISSING PART) ---
+const serviceAccount = require('./serviceAccountKey.json');
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+}
 
 const app = express();
 
@@ -26,17 +33,11 @@ app.get('/', (req, res) => {
     res.send('Food Recommendation API is running...');
 });
 
-// Authentication Routes
-app.use('/api/auth', authRoutes);
-
-// Recommendation Routes
-app.use('/api/recommendations', recommendationRoutes);
-
-// --- NEW: Health Profile Routes ---
 /**
- * Prefix all health routes with /api/health
- * This handles /api/health/save-profile
+ * Prefix all routes
  */
+app.use('/api/auth', authRoutes);
+app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/health', healthRoutes);
 
 
@@ -59,13 +60,25 @@ app.use((err, req, res, next) => {
 });
 
 // --- SERVER INITIALIZATION ---
+
+// 1. I-define muna ang PORT bago gamitin
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+// 2. ISANG app.listen lang dapat ang gamitin
+app.listen(PORT, async () => {
+    console.log(`-----------------------------------------`);
     console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`✅ Auth routes available at http://localhost:${PORT}/api/auth`);
-    console.log(`✅ Recommendation routes available at http://localhost:${PORT}/api/recommendations`);
-    // --- NEW: Log for Health Routes ---
-    console.log(`✅ Health routes available at http://localhost:${PORT}/api/health`);
+    
+    // Tawagin ang syncMLData para ma-load ang health_logs sa memory
+    try {
+        await syncMLData(); 
+        console.log(`✅ ML Knowledge Base is ready.`);
+    } catch (error) {
+        console.error("❌ ML Sync Failed:", error);
+    }
+
+    console.log(`✅ Auth routes: http://localhost:${PORT}/api/auth`);
+    console.log(`✅ Recommendation routes: http://localhost:${PORT}/api/recommendations`);
+    console.log(`✅ Health routes: http://localhost:${PORT}/api/health`);
     console.log(`-----------------------------------------`);
 });

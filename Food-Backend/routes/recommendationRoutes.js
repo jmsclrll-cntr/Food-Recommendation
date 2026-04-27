@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const recController = require('../controllers/recommendationController');
+const recCtrl = require('../controllers/recommendationController');
 
-router.post('/predict', recController.getDietRecommendation);
+router.get('/suggest', recCtrl.getSuggestion);
 
-module.exports = router;    
+module.exports = router;

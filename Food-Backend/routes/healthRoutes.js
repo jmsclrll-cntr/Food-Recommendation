@@ -1,11 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const healthController = require('../controllers/healthController');
+const ctrl = require('../controllers/healthController');
 
-// Route to save/update data
-router.post('/save-profile', healthController.saveHealthProfile);
-
-// Route to get existing data for a specific user
-router.get('/profile/:userId', healthController.getHealthProfile);
+// Dapat '/save' ito para mag-match sa axios call sa frontend
+router.post('/save', ctrl.saveHealthProfile);
+router.get('/:userId', ctrl.getHealthProfile);
 
 module.exports = router;

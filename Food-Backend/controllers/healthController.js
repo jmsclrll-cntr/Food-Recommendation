@@ -1,42 +1,50 @@
 const admin = require('firebase-admin');
+const { addToMemory } = require('../ml/mlDataService');
 
-// SAVE or UPDATE the profile
 exports.saveHealthProfile = async (req, res) => {
     const db = admin.firestore();
     try {
-        const { userId, height, weight, bmi, goal, condition } = req.body;
+        const { userId, height, weight, bmi, goal, condition, gender } = req.body;
         
         if (!userId) return res.status(400).json({ error: "User ID missing" });
 
-        // Using userId as the Document ID so each user has exactly ONE profile
-        await db.collection('health_profiles').doc(userId).set({
+        await db.collection('health_logs').add({
             userId,
+            gender,
             height: parseFloat(height),
             weight: parseFloat(weight),
             bmi: parseFloat(bmi),
             goal,
             condition,
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
 
-        res.status(200).json({ message: "Profile updated successfully" });
+        addToMemory({ gender, bmi: parseFloat(bmi), goal });
+
+        res.status(200).json({ message: "Health log added successfully" });
     } catch (error) {
+        // MAHALAGA: Para makita mo sa terminal kung bakit nag-error ang save
+        console.error("SAVE ERROR:", error); 
         res.status(500).json({ error: error.message });
     }
 };
 
-// GET the profile for tracking
 exports.getHealthProfile = async (req, res) => {
     const db = admin.firestore();
     try {
         const { userId } = req.params;
-        const doc = await db.collection('health_profiles').doc(userId).get();
+        const snapshot = await db.collection('health_logs')
+            .where('userId', '==', userId)
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
 
-        if (!doc.exists) {
-            return res.status(404).json({ message: "No profile found" });
+        if (snapshot.empty) {
+            return res.status(404).json({ message: "No data found" });
         }
 
-        res.status(200).json(doc.data());
+        const data = snapshot.docs[0].data();
+        res.status(200).json(data);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

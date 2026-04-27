@@ -1,33 +1,16 @@
-const knn = require('../ml/knnmodel');
-const dt = require('../ml/decisionTreeModel');
+const { findMostFrequentGoal } = require('../ml/mlDataService');
 
-exports.getDietRecommendation = (req, res) => {
+exports.getSuggestion = (req, res) => {
     try {
-        const { height, weight, target, condition } = req.body;
+        const { gender, bmi } = req.query;
 
-        // Map strings from frontend to numbers for ML
-        const targetMap = { "lose": 0, "gain": 1, "maintain": 2 };
-        const condMap = { "none": 0, "diabetes": 1, "hypertension": 2, "heart disease": 3 };
+        if (!gender || !bmi) {
+            return res.status(400).json({ error: "Missing parameters" });
+        }
 
-        const input = [
-            Number(height), 
-            Number(weight), 
-            targetMap[target.toLowerCase()] || 0, 
-            condMap[condition.toLowerCase()] || 0
-        ];
-
-        // Run both algorithms
-        const knnPrediction = knn.predict(input);
-        const dtPrediction = dt.predict(input);
-
-        const dietPlans = ["Low Carb Diet", "High Protein Diet", "Low Sugar Diet", "Low Sodium Diet"];
-
-        res.json({
-            success: true,
-            recommendation: dietPlans[dtPrediction], // DT is usually better for medical conditions
-            alternative: dietPlans[knnPrediction]
-        });
+        const result = findMostFrequentGoal(gender, parseFloat(bmi));
+        res.status(200).json(result);
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ error: error.message });
     }
 };
