@@ -1,13 +1,19 @@
 require('dotenv').config(); // Load variables at the very start
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
+const admin = require('firebase-admin'); // ADDED: Required for database connection
 const authRoutes = require('./routes/authRoutes');
-// --- NEW: Added for Step 5 ---
 const recommendationRoutes = require('./routes/recommendationRoutes'); 
+const healthRoutes = require('./routes/healthRoutes'); 
+const { syncMLData } = require('./ml/mlDataService');
 
-// Redundant but kept as per your existing code
-dotenv.config();
+// --- FIREBASE INITIALIZATION (THIS WAS THE MISSING PART) ---
+const serviceAccount = require('./serviceAccountKey.json');
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+}
 
 const app = express();
 
@@ -17,10 +23,7 @@ console.log("DEBUG: Your Firebase API Key is:", process.env.FIREBASE_API_KEY ? "
 console.log("-----------------------------------------");
 
 // --- MIDDLEWARE ---
-// 1. Enable CORS (allows your React frontend to communicate with this API)
 app.use(cors());
-
-// 2. Parse incoming JSON requests (important for req.body)
 app.use(express.json());
 
 // --- ROUTES ---
@@ -31,23 +34,17 @@ app.get('/', (req, res) => {
 });
 
 /**
- * Prefix all auth routes with /api/auth
- * This handles /api/auth/register, /api/auth/login, and /api/auth/google-login
+ * Prefix all routes
  */
 app.use('/api/auth', authRoutes);
-
-// --- NEW: Added for Step 5 ---
-/**
- * Prefix all recommendation routes with /api/recommendations
- * This handles /api/recommendations/predict
- */
 app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/health', healthRoutes);
+
 
 // --- ERROR HANDLING ---
 
 /**
  * Catch 404 - If a user hits a route that doesn't exist
- * This was sending the "Route not found" alert to your frontend
  */
 app.use((req, res, next) => {
     console.warn(`404 Warning: User tried to reach ${req.originalUrl}`);
@@ -63,12 +60,25 @@ app.use((err, req, res, next) => {
 });
 
 // --- SERVER INITIALIZATION ---
+
+// 1. I-define muna ang PORT bago gamitin
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+// 2. ISANG app.listen lang dapat ang gamitin
+app.listen(PORT, async () => {
+    console.log(`-----------------------------------------`);
     console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`✅ Auth routes available at http://localhost:${PORT}/api/auth`);
-    // --- NEW: Added for Step 5 ---
-    console.log(`✅ Recommendation routes available at http://localhost:${PORT}/api/recommendations`);
+    
+    // Tawagin ang syncMLData para ma-load ang health_logs sa memory
+    try {
+        await syncMLData(); 
+        console.log(`✅ ML Knowledge Base is ready.`);
+    } catch (error) {
+        console.error("❌ ML Sync Failed:", error);
+    }
+
+    console.log(`✅ Auth routes: http://localhost:${PORT}/api/auth`);
+    console.log(`✅ Recommendation routes: http://localhost:${PORT}/api/recommendations`);
+    console.log(`✅ Health routes: http://localhost:${PORT}/api/health`);
     console.log(`-----------------------------------------`);
 });
