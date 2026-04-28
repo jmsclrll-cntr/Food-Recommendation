@@ -1,23 +1,34 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCircle, Loader2 } from 'lucide-react';
 
 const GenerateWeekly = () => {
   const navigate = useNavigate();
 
-  // --- Logic remains strictly untouched ---
+  // --- Logic States ---
   const [user] = useState(() => {
     const stored = localStorage.getItem('user');
     return stored ? JSON.parse(stored) : null;
   });
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); 
+  const [isSyncing, setIsSyncing] = useState(false); 
+  // isSubmitted starts as FALSE every time you log in
+  const [isSubmitted, setIsSubmitted] = useState(false); 
+  const [showToast, setShowToast] = useState(false);
+  
+  const [activeDayIdx, setActiveDayIdx] = useState(0); 
   const [bmiStatus, setBmiStatus] = useState("");
   const [suggestion, setSuggestion] = useState("");
 
+  // formData starts EMPTY every time
   const [formData, setFormData] = useState({
     gender: 'male', height: '', weight: '', goal: 'maintain', condition: 'none'
   });
+
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   const bmi = useMemo(() => {
     if (formData.height > 0 && formData.weight > 0) {
@@ -27,15 +38,13 @@ const GenerateWeekly = () => {
     return 0;
   }, [formData.height, formData.weight]);
 
+  // --- MODIFIED: REMOVED AUTO-FILL LOGIC ---
   useEffect(() => {
     if (!user) { navigate('/'); return; }
-    const loadData = async () => {
-      try {
-        const res = await axios.get(`http://localhost:5000/api/health/${user.uid || user.id}`);
-        if (res.data) setFormData(res.data);
-      } catch { console.log("New log."); } finally { setLoading(false); }
-    };
-    loadData();
+    
+    // We only check if the component is ready, we DO NOT 
+    // fetch old data to fill the form anymore.
+    setLoading(false); 
   }, [navigate, user]);
 
   useEffect(() => {
@@ -51,113 +60,180 @@ const GenerateWeekly = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!formData.height || !formData.weight || !formData.gender || !formData.goal) {
+        alert("Please complete all biometric fields.");
+        return;
+    }
+
+    setIsSyncing(true);
+
+    const payload = {
+        userId: user.uid || user.id,
+        ...formData,
+        bmi
+    };
+
     try {
-      await axios.post('http://localhost:5000/api/health/save', {
-        userId: user.uid || user.id, ...formData, bmi
-      });
-      alert("Progress saved.");
-    } catch { alert("Save error."); }
+      if (!isSubmitted) {
+        // ACTION 1: FIRST TIME SAVING (INSERT)
+        await axios.post('http://localhost:5000/api/health/save', payload);
+      } else {
+        // ACTION 2: UPDATING WITHIN THE SAME SESSION
+        await axios.put(`http://localhost:5000/api/health/update/${user.uid || user.id}`, payload);
+      }
+      
+      setTimeout(() => {
+        setIsSyncing(false);
+        setIsSubmitted(true); // Now the layout shifts and button becomes "Update"
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000); 
+      }, 1200);
+
+    } catch (err) {
+      setIsSyncing(false);
+      alert("Error connecting to database.");
+    }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#f5faf4] text-[#6a9966] font-bold text-[10px] tracking-[0.4em] uppercase">Syncing...</div>;
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center bg-[#f5faf4]">
+      <Loader2 className="w-8 h-8 animate-spin text-[#6a9966]" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#f5faf4] text-[#1c3a1c] font-sans antialiased p-6 md:p-10">
-      
-      {/* Sidebar-style container: Aligned left */}
-      <div className="max-w-xl ml-0">
-        
-        {/* Navigation Header */}
-        <header className="flex items-center gap-6 mb-8">
-          <button onClick={() => navigate('/dashboard')} className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#5a7054] hover:text-[#2d5a27] transition-all">
-            ← Hub
-          </button>
-          <div className="text-left">
-            <h2 className="font-serif text-2xl italic text-[#1c3a1c]">NutriFind</h2>
-            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966]">Biometric Intelligence</p>
-          </div>
-        </header>
+    <div className="h-screen w-full bg-[#f5faf4] text-[#1c3a1c] font-sans antialiased p-10 overflow-hidden relative">
+      <AnimatePresence>
+        {showToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-[#1c3a1c] text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3"
+          >
+            <CheckCircle className="text-[#8ecb84] w-4 h-4" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">
+                {isSubmitted ? "Analysis Updated" : "Data Synced"}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* --- MAIN LAYOUT STRUCTURE --- */}
-        <div className="flex flex-col gap-6">
-          
-          {/* 1. TOP PANEL: Personal Biometrics (Compact but professional) */}
-          <main className="bg-white rounded-[40px] px-10 py-12 border border-[#ddd8ce] shadow-sm">
-            <h3 className="font-serif text-2xl mb-8 tracking-tight">Personal Biometrics</h3>
-            
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Gender Identity</label>
-                  <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] focus:border-[#2d5a27] outline-none font-medium text-sm transition-all cursor-pointer">
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
+      <AnimatePresence>
+        {isSyncing && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-[#f5faf4]/60 backdrop-blur-sm flex items-center justify-center"
+          >
+            <Loader2 className="w-12 h-12 animate-spin text-[#2d5a27]" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className={`grid h-full transition-all duration-1000 ease-in-out ${isSubmitted ? 'grid-cols-12 gap-10' : 'grid-cols-1'}`}>
+        <motion.div layout transition={{ type: "spring", stiffness: 60, damping: 15 }}
+          className={`${isSubmitted ? 'col-span-4' : 'max-w-xl mx-auto w-full'} flex flex-col h-full`}
+        >
+          <header className="flex items-center gap-6 mb-8 flex-shrink-0">
+            <button onClick={() => navigate('/dashboard')} className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#5a7054] hover:text-[#2d5a27]">← Hub</button>
+            <div className="text-left">
+              <h2 className="font-serif text-2xl italic">NutriFind</h2>
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966]">Biometric Intelligence</p>
+            </div>
+          </header>
+
+          <div className="flex flex-col gap-6 flex-grow overflow-hidden pb-4">
+            <main className="bg-white rounded-xl p-10 border border-[#ddd8ce] shadow-sm">
+              <h3 className="font-serif text-2xl mb-8 tracking-tight">Personal Biometrics</h3>
+              <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Gender</label>
+                    <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] outline-none font-medium text-sm transition-all" required>
+                      <option value="male">Male</option><option value="female">Female</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Status</label>
+                    <select value={formData.condition} onChange={e => setFormData({...formData, condition: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] outline-none font-medium text-sm transition-all">
+                      <option value="none">Healthy</option><option value="diabetes">Diabetes</option><option value="hypertension">Hypertension</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Height (cm)</label>
+                    <input type="number" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] outline-none text-base font-medium" required />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Weight (kg)</label>
+                    <input type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] outline-none text-base font-medium" required />
+                  </div>
+                </div>
+                <div className="space-y-3 pt-2">
+                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Goal</label>
+                  <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-5 rounded-lg border-2 font-bold text-sm outline-none transition-all ${suggestion ? 'border-[#8ecb84] bg-[#f5faf4]' : 'border-[#ddd8ce]'}`}>
+                    <option value="lose">Weight Loss</option><option value="gain">Muscle Gain</option><option value="maintain">Maintenance</option>
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Medical Status</label>
-                  <select value={formData.condition} onChange={e => setFormData({...formData, condition: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] focus:border-[#2d5a27] outline-none font-medium text-sm transition-all cursor-pointer">
-                    <option value="none">Healthy</option>
-                    <option value="diabetes">Diabetes</option>
-                    <option value="hypertension">Hypertension</option>
-                  </select>
-                </div>
+                <button type="submit" disabled={isSyncing} className="w-full h-12 bg-[#2d5a27] hover:bg-[#1c3a1c] text-white rounded-lg font-bold text-[10px] uppercase tracking-[0.4em] transition-all active:scale-[0.98] shadow-md disabled:opacity-50">
+                  {isSyncing ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (isSubmitted ? 'Update Analysis' : 'Save & Sync Data')}
+                </button>
+              </form>
+            </main>
+
+            <div className="grid grid-cols-2 gap-5 flex-shrink-0">
+              <div className="bg-[#1c3a1c] rounded-xl p-6 text-center text-[#e8f4e5] shadow-lg flex flex-col justify-center h-32">
+                 <p className="text-[8px] font-bold uppercase tracking-[0.4em] text-[#6a9966] mb-2">BMI Index</p>
+                 <h2 className="text-4xl font-serif leading-none mb-3 tracking-tighter">{bmi}</h2>
+                 <div className="inline-block px-4 py-1 bg-[#2d5a27] rounded-full text-[8px] font-black uppercase tracking-widest mx-auto">{bmiStatus || "Pending"}</div>
               </div>
-
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Height (cm)</label>
-                  <input type="number" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] focus:border-[#2d5a27] outline-none text-base font-medium" placeholder="170" required />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Weight (kg)</label>
-                  <input type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] focus:border-[#2d5a27] outline-none text-base font-medium" placeholder="70" required />
-                </div>
+              <div className="bg-white rounded-xl p-6 border border-[#ddd8ce] shadow-sm flex flex-col justify-center h-32">
+                <h4 className="text-[8px] font-bold uppercase tracking-widest text-[#5a7054] mb-2">Health Insights</h4>
+                <p className="text-[10px] leading-relaxed italic opacity-80">{suggestion ? `We recommend prioritizing ${suggestion.toUpperCase()}.` : "Metrics required."}</p>
               </div>
-
-              <div className="space-y-3 pt-2">
-                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Nutritional Goal</label>
-                <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-5 rounded-xl border-2 font-bold text-sm outline-none transition-all cursor-pointer ${suggestion ? 'border-[#8ecb84] bg-[#f5faf4]' : 'border-[#ddd8ce]'}`}>
-                  <option value="lose">Weight Loss</option>
-                  <option value="gain">Muscle Gain</option>
-                  <option value="maintain">Maintenance</option>
-                </select>
-                {suggestion && <p className="text-[9px] font-bold text-[#2d5a27] uppercase tracking-widest mt-2 animate-pulse italic text-right">✨Suggestion: {suggestion}</p>}
-              </div>
-
-              <button type="submit" className="w-full h-12 bg-[#2d5a27] hover:bg-[#1c3a1c] text-white rounded-xl font-bold text-[10px] uppercase tracking-[0.4em] transition-all active:scale-[0.98] shadow-md">
-                Save & Sync Data
-              </button>
-            </form>
-          </main>
-
-          {/* 2. BOTTOM ROW: BMI and Description */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            
-            {/* Body Mass Index Panel */}
-            <div className="bg-[#1c3a1c] rounded-[32px] p-6 text-center text-[#e8f4e5] shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[160px]">
-               <div className="absolute top-[-5px] right-[-5px] w-20 h-20 bg-white/5 rounded-full" />
-               <p className="text-[8px] font-bold uppercase tracking-[0.4em] text-[#6a9966] mb-2">BMI Index</p>
-               <h2 className="text-5xl font-serif leading-none mb-3 tracking-tighter">{bmi}</h2>
-               <div className="inline-block px-4 py-1 bg-[#2d5a27] rounded-full text-[8px] font-black uppercase tracking-widest mx-auto border border-white/5">
-                 {bmiStatus || "Wait..."}
-               </div>
             </div>
-
-            {/* Description Panel */}
-            <div className="bg-white rounded-[32px] p-6 border border-[#ddd8ce] shadow-sm flex flex-col justify-center min-h-[160px]">
-              <h4 className="text-[8px] font-bold uppercase tracking-widest text-[#5a7054] mb-2">Insights</h4>
-              <p className="text-[11px] leading-relaxed text-[#1c3a1c] italic opacity-80">
-                {suggestion 
-                  ? `Community patterns suggest prioritizing ${suggestion.toUpperCase()} based on your current biometric profile.` 
-                  : "Input your height and weight to receive personalized AI recommendations."
-                }
-              </p>
-            </div>
-
           </div>
+        </motion.div>
 
-        </div>
+        <AnimatePresence>
+          {isSubmitted && (
+            <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4, duration: 0.8 }}
+              className="col-span-8 h-full pt-[104px]"
+            >
+              <div className="grid grid-cols-4 grid-rows-2 gap-4 h-[calc(100%-140px)]">
+                <motion.div layout key={days[activeDayIdx]} className="col-span-1 row-span-2 bg-white rounded-xl p-8 border-2 border-[#2d5a27] shadow-xl flex flex-col">
+                  <span className="text-[9px] font-black text-[#2d5a27] uppercase tracking-[0.3em] mb-4">Focus: Day 0{activeDayIdx + 1}</span>
+                  <h4 className="font-serif italic text-3xl mb-8 text-[#1c3a1c]">Dietary Plan</h4>
+                  <div className="space-y-6 flex-1 border-t border-[#f5faf4] pt-8">
+                    <div className="h-3 w-24 bg-[#f5faf4] rounded-full" />
+                    <div className="h-2 w-full bg-[#f5faf4] rounded-full opacity-60" />
+                    <div className="h-2 w-full bg-[#f5faf4] rounded-full opacity-60" />
+                    <div className="h-2 w-2/3 bg-[#f5faf4] rounded-full opacity-60" />
+                  </div>
+                </motion.div>
+
+                {days.map((day, idx) => {
+                  if (idx === activeDayIdx) return null; 
+                  return (
+                    <motion.div 
+                      key={day} 
+                      onClick={() => setActiveDayIdx(idx)}
+                      whileHover={{ y: -5 }}
+                      className="bg-white rounded-xl p-6 border border-[#ddd8ce] shadow-sm flex flex-col justify-center cursor-pointer hover:border-[#2d5a27] transition-all group"
+                    >
+                      <span className="text-[8px] font-black text-[#6a9966] uppercase tracking-[0.2em] mb-2">Day 0{idx + 1}</span>
+                      <h4 className="font-serif italic text-lg text-[#1c3a1c] mb-3">Dietary Plan</h4>
+                      <div className="space-y-2 border-t border-[#f5faf4] pt-3 opacity-40">
+                        <div className="h-1.5 w-full bg-[#f5faf4] rounded-full" />
+                        <div className="h-1.5 w-2/3 bg-[#f5faf4] rounded-full" />
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
