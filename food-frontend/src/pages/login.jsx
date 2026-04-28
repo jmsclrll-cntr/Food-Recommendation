@@ -6,6 +6,7 @@ import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
 
+
 const EMOJIS = [
   { char: '🥗', size: '22px', top: '7%', left: '8%', delay: 0 },
   { char: '🍕', size: '24px', top: '15%', left: '25%', delay: 1.5 },
@@ -57,9 +58,51 @@ const Login = () => {
     }
   };
 
+const texts = [
+  "Designed for your balance.",
+  "Refined nutrition, everyday.",
+  "Where health feels effortless."
+];
+
+ const [textIndex, setTextIndex] = useState(0);
+const [displayText, setDisplayText] = useState("");
+const [isDeleting, setIsDeleting] = useState(false);
+const [speed, setSpeed] = useState(80);
+
+useEffect(() => {
+  const currentText = texts[textIndex];
+
+  const handleTyping = () => {
+    if (!isDeleting) {
+      setDisplayText(currentText.substring(0, displayText.length + 1));
+
+      if (displayText === currentText) {
+        setTimeout(() => setIsDeleting(true), 1200);
+      }
+    } else {
+      setDisplayText(currentText.substring(0, displayText.length - 1));
+
+      if (displayText === "") {
+        setIsDeleting(false);
+        setTextIndex((prev) => (prev + 1) % texts.length);
+      }
+    }
+  };
+
+  const timer = setTimeout(handleTyping, isDeleting ? 40 : speed);
+
+  return () => clearTimeout(timer);
+}, [displayText, isDeleting, textIndex]);
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 bg-[#f5faf4]">
-      <div className="w-full max-w-4xl bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px]">
+   <div
+  className="relative min-h-screen flex items-center justify-center p-4 sm:p-8 bg-cover bg-center"
+  style={{ backgroundImage: "url('/bg3.png')" }}
+>
+
+{/* Overlay */}
+  <div className="absolute inset-0 bg-black/40 z-0"></div>
+       <div className="relative z-10 w-full max-w-4xl bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px]">
         
         {/* Left Panel */}
         <div className="relative w-full md:w-[42%] bg-[#1c3a1c] p-8 md:p-10 flex flex-col justify-between overflow-hidden text-white">
@@ -79,8 +122,12 @@ const Login = () => {
           ))}
 
           <div className="relative z-20">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center p-2 shadow-lg mb-4 border border-white/10 group overflow-hidden">
-              <span className="text-2xl group-hover:scale-110 transition-transform">🐼</span>
+             <div className="flex items-center justify-left">
+              <img
+                src="/webLogo.png"
+                alt="Logo"
+                className="w-10 h-10 object-contain group-hover:scale-110 transition-transform"
+              />
             </div>
             <h2 className="font-serif text-2xl font-semibold text-[#e8f4e5] leading-none mb-1 text-shadow-sm">NutriFind</h2>
             <p className="text-[9px] text-[#6a9966] uppercase tracking-[0.2em] font-black">Premium Nutrition</p>
@@ -88,32 +135,17 @@ const Login = () => {
 
           <div className="relative z-20 my-12">
             <p className="text-[10px] text-[#6a9966] uppercase tracking-[0.12em] font-medium mb-2">Eat smarter, live better</p>
-            <AnimatePresence mode="wait">
-              <motion.h1 
-                key={animKey}
-                variants={{ hidden: { opacity: 1 }, visible: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.2 } } }}
-                initial="hidden" animate="visible" exit={{ opacity: 0, transition: { duration: 0.5 } }}
-                className="font-serif text-3xl md:text-4xl font-normal text-[#e8f4e5] leading-tight mb-6 flex flex-wrap"
-              >
-                {"Meals made for ".split("").map((char, index) => (
-                  <motion.span key={`i-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8 }, visible: { opacity: 1, scale: 1 } }} className="inline-block">{char === " " ? "\u00A0" : char}</motion.span>
-                ))}
-                <span className="italic text-[#8ecb84]">
-                  {"your".split("").map((char, index) => (
-                    <motion.span key={`s-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8, rotate: -10 }, visible: { opacity: 1, scale: 1, rotate: 0 } }} className="inline-block">{char}</motion.span>
-                  ))}
-                </span>
-                {" goals.".split("").map((char, index) => (
-                  <motion.span key={`e-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8 }, visible: { opacity: 1, scale: 1 } }} className="inline-block">{char === " " ? "\u00A0" : char}</motion.span>
-                ))}
-              </motion.h1>
-            </AnimatePresence>
-          </div>
+
+          <h1 className="font-serif text-3xl md:text-2xl font-normal text-[#e8f4e5] leading-tight mb-6 flex flex-wrap">
+                    {displayText}
+                    <span className="ml-1 animate-pulse text-[#8ecb84]">|</span>
+                  </h1>
+                      </div>
 
           <div className="relative z-20 grid grid-cols-3 gap-4">
-            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">4</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Users</p></div>
-            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">500+</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Meals</p></div>
-            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">3</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Goals</p></div>
+            {/* <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">7-days</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Plan</p></div> */}
+            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">NutriTeam</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Creation</p></div>
+            {/* <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">3</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Goals</p></div> */}
           </div>
         </div>
 
