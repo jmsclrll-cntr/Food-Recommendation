@@ -20,17 +20,24 @@ const EMOJIS = [
   { char: '🍇', size: '21px', top: '42%', left: '52%', delay: 2.5 },
 ];
 
+const SLOGANS = [
+  { prefix: "Meals made for ", accent: "your", suffix: " goals." },
+  { prefix: "Nutrition tailored to ", accent: "every", suffix: " body." },
+  { prefix: "Smart eating for a ", accent: "better", suffix: " you." },
+];
+
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const [animKey, setAnimKey] = useState(0);
+  const [sloganIndex, setSloganIndex] = useState(0);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
+  // Handle slogan loop and animation key
   useEffect(() => {
     const timer = setInterval(() => {
-      setAnimKey(prev => prev + 1);
-    }, 8000);
+      setSloganIndex((prev) => (prev + 1) % SLOGANS.length);
+    }, 6000);
     return () => clearInterval(timer);
   }, []);
 
@@ -58,41 +65,7 @@ const Login = () => {
     }
   };
 
-const texts = [
-  "Designed for your balance.",
-  "Refined nutrition, everyday.",
-  "Where health feels effortless."
-];
-
- const [textIndex, setTextIndex] = useState(0);
-const [displayText, setDisplayText] = useState("");
-const [isDeleting, setIsDeleting] = useState(false);
-const [speed, setSpeed] = useState(80);
-
-useEffect(() => {
-  const currentText = texts[textIndex];
-
-  const handleTyping = () => {
-    if (!isDeleting) {
-      setDisplayText(currentText.substring(0, displayText.length + 1));
-
-      if (displayText === currentText) {
-        setTimeout(() => setIsDeleting(true), 1200);
-      }
-    } else {
-      setDisplayText(currentText.substring(0, displayText.length - 1));
-
-      if (displayText === "") {
-        setIsDeleting(false);
-        setTextIndex((prev) => (prev + 1) % texts.length);
-      }
-    }
-  };
-
-  const timer = setTimeout(handleTyping, isDeleting ? 40 : speed);
-
-  return () => clearTimeout(timer);
-}, [displayText, isDeleting, textIndex]);
+  const currentSlogan = SLOGANS[sloganIndex];
 
   return (
    <div
@@ -135,58 +108,93 @@ useEffect(() => {
 
           <div className="relative z-20 my-12">
             <p className="text-[10px] text-[#6a9966] uppercase tracking-[0.12em] font-medium mb-2">Eat smarter, live better</p>
+            <AnimatePresence mode="wait">
+              <motion.h1 
+                key={sloganIndex}
+                variants={{ 
+                    hidden: { opacity: 1 }, 
+                    visible: { opacity: 1, transition: { staggerChildren: 0.05, delayChildren: 0.1 } } 
+                }}
+                initial="hidden" 
+                animate="visible" 
+                exit={{ opacity: 0, x: -20, transition: { duration: 0.4 } }}
+                className="font-serif text-3xl md:text-4xl font-normal text-[#e8f4e5] leading-tight mb-6 flex flex-wrap"
+              >
+                {/* Dynamic Prefix */}
+                {currentSlogan.prefix.split("").map((char, index) => (
+                  <motion.span key={`p-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8 }, visible: { opacity: 1, scale: 1 } }} className="inline-block">
+                    {char === " " ? "\u00A0" : char}
+                  </motion.span>
+                ))}
 
-          <h1 className="font-serif text-3xl md:text-2xl font-normal text-[#e8f4e5] leading-tight mb-6 flex flex-wrap">
-                    {displayText}
-                    <span className="ml-1 animate-pulse text-[#8ecb84]">|</span>
-                  </h1>
-                      </div>
+                {/* Dynamic Accent (Italic) */}
+                <span className="italic text-[#8ecb84]">
+                  {currentSlogan.accent.split("").map((char, index) => (
+                    <motion.span key={`a-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8, rotate: -10 }, visible: { opacity: 1, scale: 1, rotate: 0 } }} className="inline-block">
+                      {char}
+                    </motion.span>
+                  ))}
+                </span>
 
-          <div className="relative z-20 grid grid-cols-3 gap-4">
-            {/* <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">7-days</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Plan</p></div> */}
-            <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">NutriTeam</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Creation</p></div>
-            {/* <div><p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-brand-accent pl-2 leading-none">3</p><p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Goals</p></div> */}
+                {/* Dynamic Suffix */}
+                {currentSlogan.suffix.split("").map((char, index) => (
+                  <motion.span key={`s-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8 }, visible: { opacity: 1, scale: 1 } }} className="inline-block">
+                    {char === " " ? "\u00A0" : char}
+                  </motion.span>
+                ))}
+              </motion.h1>
+            </AnimatePresence>
+          </div>
+
+          <div className="relative z-20 flex justify-between items-end">
+            <div>
+              <p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-[#8ecb84] pl-2 leading-none">7-Day</p>
+              <p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Plan</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-[#6a9966] uppercase tracking-[0.12em] font-medium">Created by NutriTeam</p>
+            </div>
           </div>
         </div>
 
         {/* Right Panel */}
-        <div className="flex-1 bg-brand-light p-8 md:p-12 flex flex-col justify-center">
+        <div className="flex-1 bg-[#fdfdfc] p-8 md:p-12 flex flex-col justify-center">
           <div className="max-w-md mx-auto w-full">
-            <h2 className="font-serif text-3xl text-brand-text mb-1">Welcome Back</h2>
-            <p className="text-sm text-brand-muted mb-8 italic">Premium Nutrition</p>
+            <h2 className="font-serif text-3xl text-[#1c3a1c] mb-1">Welcome Back</h2>
+            <p className="text-sm text-[#5a7054] mb-8 italic">Premium Nutrition</p>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-widest text-[#5a7054]">Email address</label>
                 <div className="relative group">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-brand-text/40 group-focus-within:text-brand-accent transition-colors" />
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full h-12 pl-11 pr-4 bg-white border-1.5 border-[#ddd8ce] rounded-xl focus:border-brand-accent focus:ring-4 focus:ring-brand-accent/10 outline-none transition-all text-sm" />
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-[#1c3a1c]/40 group-focus-within:text-[#8ecb84] transition-colors" />
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full h-12 pl-11 pr-4 bg-white border border-[#ddd8ce] rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-widest text-[#5a7054]">Password</label>
                 <div className="relative group">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-brand-text/40 group-focus-within:text-brand-accent transition-colors" />
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-[#1c3a1c]/40 group-focus-within:text-[#8ecb84] transition-colors" />
                   <input 
                     type={showPassword ? "text" : "password"} 
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)} 
                     placeholder="••••••••" 
                     required 
-                    className="w-full h-12 pl-11 pr-11 bg-white border-1.5 border-[#ddd8ce] rounded-xl focus:border-brand-accent focus:ring-4 focus:ring-brand-accent/10 outline-none transition-all text-sm" 
+                    className="w-full h-12 pl-11 pr-11 bg-white border border-[#ddd8ce] rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm" 
                   />
                   <button 
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-brand-text/40 hover:text-brand-accent transition-colors focus:outline-none"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
                   >
                     {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
                   </button>
                 </div>
               </div>
 
-              <button type="submit" className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group shadow-lg shadow-brand-secondary/20 mt-4">
+              <button type="submit" className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group shadow-lg mt-4">
                 Sign In →
               </button>
             </form>
@@ -197,7 +205,7 @@ useEffect(() => {
               <div className="h-[1px] flex-1 bg-[#e4dfd5]" />
             </div>
 
-            <button onClick={handleGoogle} className="w-full h-12 bg-white hover:bg-[#f5faf4] border-2 border-[#c8c2b8] hover:border-brand-accent rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6">
+            <button onClick={handleGoogle} className="w-full h-12 bg-white hover:bg-[#f5faf4] border-2 border-[#c8c2b8] hover:border-[#8ecb84] rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6">
               <svg width="18" height="18" viewBox="0 0 48 48">
                 <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.6-6.6C35.4 2.7 30 .5 24 .5 14.7.5 6.7 6.1 3 14l7.8 6c1.9-5.5 7-9.5 13.2-9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.6A14.4 14.4 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.5 13.4A23.5 23.5 0 0 0 .5 24c0 3.8.9 7.4 2.5 10.6l7.8-6z"/><path fill="#34A853" d="M24 47.5c6 0 11-2 14.7-5.3l-7.5-5.8c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.4-4.2-13.2-9.9l-7.8 6C6.6 41.9 14.7 47.5 24 47.5z"/>
               </svg>
