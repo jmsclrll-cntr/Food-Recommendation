@@ -15,7 +15,6 @@ const GenerateWeekly = () => {
 
   const [loading, setLoading] = useState(true); 
   const [isSyncing, setIsSyncing] = useState(false); 
-  // isSubmitted starts as FALSE every time you log in
   const [isSubmitted, setIsSubmitted] = useState(false); 
   const [showToast, setShowToast] = useState(false);
   
@@ -23,7 +22,6 @@ const GenerateWeekly = () => {
   const [bmiStatus, setBmiStatus] = useState("");
   const [suggestion, setSuggestion] = useState("");
 
-  // formData starts EMPTY every time
   const [formData, setFormData] = useState({
     gender: 'male', height: '', weight: '', goal: 'maintain', condition: 'none'
   });
@@ -38,15 +36,12 @@ const GenerateWeekly = () => {
     return 0;
   }, [formData.height, formData.weight]);
 
-  // --- MODIFIED: REMOVED AUTO-FILL LOGIC ---
   useEffect(() => {
     if (!user) { navigate('/'); return; }
-    
-    // We only check if the component is ready, we DO NOT 
-    // fetch old data to fill the form anymore.
     setLoading(false); 
   }, [navigate, user]);
 
+  // Fetch recommendation based on BMI
   useEffect(() => {
     if (bmi > 0 && formData.gender) {
       axios.get(`http://localhost:5000/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmi}`)
@@ -76,16 +71,14 @@ const GenerateWeekly = () => {
 
     try {
       if (!isSubmitted) {
-        // ACTION 1: FIRST TIME SAVING (INSERT)
         await axios.post('http://localhost:5000/api/health/save', payload);
       } else {
-        // ACTION 2: UPDATING WITHIN THE SAME SESSION
         await axios.put(`http://localhost:5000/api/health/update/${user.uid || user.id}`, payload);
       }
       
       setTimeout(() => {
         setIsSyncing(false);
-        setIsSubmitted(true); // Now the layout shifts and button becomes "Update"
+        setIsSubmitted(true);
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3000); 
       }, 1200);
@@ -169,12 +162,27 @@ const GenerateWeekly = () => {
                     <input type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className="w-full h-10 bg-transparent border-b-2 border-[#ddd8ce] outline-none text-base font-medium" required />
                   </div>
                 </div>
+
+                {/* --- GOAL DROPDOWN WITH INTERNAL RECOMMENDATION --- */}
                 <div className="space-y-3 pt-2">
                   <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Goal</label>
-                  <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-5 rounded-lg border-2 font-bold text-sm outline-none transition-all ${suggestion ? 'border-[#8ecb84] bg-[#f5faf4]' : 'border-[#ddd8ce]'}`}>
-                    <option value="lose">Weight Loss</option><option value="gain">Muscle Gain</option><option value="maintain">Maintenance</option>
+                  <select 
+                    value={formData.goal} 
+                    onChange={e => setFormData({...formData, goal: e.target.value})} 
+                    className={`w-full h-12 px-5 rounded-lg border-2 font-bold text-sm outline-none transition-all ${suggestion ? 'border-[#8ecb84] bg-[#f5faf4]' : 'border-[#ddd8ce]'}`}
+                  >
+                    <option value="lose">
+                        Weight Loss {suggestion === 'lose' ? '(Recommended)' : ''}
+                    </option>
+                    <option value="gain">
+                        Gain Weight {suggestion === 'gain' ? '(Recommended)' : ''}
+                    </option>
+                    <option value="maintain">
+                        Maintenance {suggestion === 'maintain' ? '(Recommended)' : ''}
+                    </option>
                   </select>
                 </div>
+
                 <button type="submit" disabled={isSyncing} className="w-full h-12 bg-[#2d5a27] hover:bg-[#1c3a1c] text-white rounded-lg font-bold text-[10px] uppercase tracking-[0.4em] transition-all active:scale-[0.98] shadow-md disabled:opacity-50">
                   {isSyncing ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (isSubmitted ? 'Update Analysis' : 'Save & Sync Data')}
                 </button>
@@ -189,7 +197,12 @@ const GenerateWeekly = () => {
               </div>
               <div className="bg-white rounded-xl p-6 border border-[#ddd8ce] shadow-sm flex flex-col justify-center h-32">
                 <h4 className="text-[8px] font-bold uppercase tracking-widest text-[#5a7054] mb-2">Health Insights</h4>
-                <p className="text-[10px] leading-relaxed italic opacity-80">{suggestion ? `We recommend prioritizing ${suggestion.toUpperCase()}.` : "Metrics required."}</p>
+                <p className="text-[10px] leading-relaxed italic opacity-80">
+                    {suggestion 
+                        ? `We recommend prioritizing ${suggestion === 'gain' ? 'GAIN WEIGHT' : suggestion.toUpperCase()}.` 
+                        : "Metrics required."
+                    }
+                </p>
               </div>
             </div>
           </div>

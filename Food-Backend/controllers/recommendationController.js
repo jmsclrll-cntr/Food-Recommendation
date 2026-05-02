@@ -2,6 +2,7 @@ const { findMostFrequentGoal } = require('../ml/mlDataService');
 
 exports.getSuggestion = (req, res) => {
     try {
+        
         const { gender, bmi } = req.query;
 
         if (!gender || !bmi) {

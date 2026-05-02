@@ -3,6 +3,7 @@ import Login from './pages/login';
 import Signup from './pages/signup';
 import Dashboard from './pages/dashboard';
 import GenerateWeekly from './pages/generateWeekly.jsx';
+import Profile from './pages/Profile';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/generate-weekly" element={<GenerateWeekly />} />
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </Router>
   );
