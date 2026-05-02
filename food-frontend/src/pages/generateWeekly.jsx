@@ -24,7 +24,12 @@ const GenerateWeekly = () => {
   const [weeklyPlan, setWeeklyPlan] = useState(null);
 
   const [formData, setFormData] = useState({
-    gender: 'male', height: '', weight: '', age: 25, goal: 'maintain', condition: 'none'
+    gender: 'male', 
+    height: '', 
+    weight: '', 
+    age: 25, 
+    goal: 'maintain', 
+    condition: 'none'
   });
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -38,19 +43,21 @@ const GenerateWeekly = () => {
     return 0;
   }, [formData.height, formData.weight]);
 
-  // Initial Check
+  // Initial Auth Check
   useEffect(() => {
     if (!user) { navigate('/'); return; }
     setLoading(false); 
   }, [navigate, user]);
 
-  // Live BMI Category Prediction
+  // Live BMI Recommendation Sync (From File 2)
   useEffect(() => {
     if (bmi > 0 && formData.gender) {
       axios.get(`http://localhost:5000/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmi}`)
         .then(res => {
           setSuggestion(res.data.goal);
           setBmiStatus(res.data.category);
+          // Automatically set the goal based on AI recommendation
+          setFormData(prev => ({ ...prev, goal: res.data.goal }));
         }).catch(() => console.log("Prediction sync error."));
     }
   }, [bmi, formData.gender]);
@@ -64,7 +71,6 @@ const GenerateWeekly = () => {
 
     setIsSyncing(true);
 
-    // NECESSARY CHANGE: Ensure all values are sent correctly
     const payload = {
         userId: user.uid || user.id,
         gender: formData.gender,
@@ -77,13 +83,16 @@ const GenerateWeekly = () => {
     };
 
     try {
-      // 1. Save health data
-      await axios.post('http://localhost:5000/api/health/save', payload);
+      // 1. Save or Update Health Data (Logic from File 2)
+      if (!isSubmitted) {
+        await axios.post('http://localhost:5000/api/health/save', payload);
+      } else {
+        await axios.put(`http://localhost:5000/api/health/update/${user.uid || user.id}`, payload);
+      }
       
-      // 2. Fetch the 7-day ML generated plan
+      // 2. Fetch the 7-day ML generated plan (Logic from File 1)
       const planRes = await axios.post('http://localhost:5000/api/recommendations/generate-plan', payload);
       
-      // Check if data actually exists in response
       if (planRes.data && planRes.data.plan) {
         setWeeklyPlan(planRes.data.plan);
         
@@ -94,14 +103,13 @@ const GenerateWeekly = () => {
           setTimeout(() => setShowToast(false), 3000); 
         }, 1200);
       } else {
-          throw new Error("Empty plan");
+          throw new Error("Plan generation returned empty data.");
       }
 
     } catch (err) {
       setIsSyncing(false);
-      // Detailed error logging to help you debug
-      console.error("Submit Error:", err.response?.data || err.message);
-      alert("Error: " + (err.response?.data?.error || "Ensure your food database in Firestore is not empty and has breakfast, lunch, and dinner items."));
+      console.error("Sync Error:", err.response?.data || err.message);
+      alert("Error: " + (err.response?.data?.error || "Database connection failed. Ensure food database is populated."));
     }
   };
 
@@ -127,7 +135,9 @@ const GenerateWeekly = () => {
             className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-[#1c3a1c] text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3"
           >
             <CheckCircle className="text-[#8ecb84] w-4 h-4" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Plan Synced & Saved</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest">
+                {isSubmitted ? "Plan Synced & Updated" : "Data Saved"}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -141,7 +151,7 @@ const GenerateWeekly = () => {
           >
             <div className="text-center">
                 <Loader2 className="w-12 h-12 animate-spin text-[#2d5a27] mx-auto mb-4" />
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#2d5a27]">Analyzing Nutritional Voids...</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#2d5a27]">Analyzing Biometrics & Generating Plan...</p>
             </div>
           </motion.div>
         )}
@@ -157,7 +167,7 @@ const GenerateWeekly = () => {
                 className="fixed bottom-10 left-10 z-[60] bg-[#1c3a1c] text-white px-8 py-5 rounded-full shadow-2xl flex items-center gap-4 hover:bg-[#2d5a27] transition-all group"
             >
                 <Save className="w-5 h-5 text-[#8ecb84]" />
-                <span className="text-[11px] font-black uppercase tracking-[0.2em]">Save Diet to Profile</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.2em]">Confirm & Save Plan</span>
             </motion.button>
         )}
       </AnimatePresence>
@@ -213,10 +223,14 @@ const GenerateWeekly = () => {
 
                 <div className="space-y-3">
                   <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5a7054]">Intended Goal</label>
-                  <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className="w-full h-12 px-5 rounded-xl border-2 border-[#ddd8ce] font-bold text-sm outline-none transition-all focus:border-[#8ecb84]">
-                    <option value="lose">Weight Loss</option>
-                    <option value="gain">Muscle Gain</option>
-                    <option value="maintain">Maintenance</option>
+                  <select 
+                    value={formData.goal} 
+                    onChange={e => setFormData({...formData, goal: e.target.value})} 
+                    className={`w-full h-12 px-5 rounded-xl border-2 font-bold text-sm outline-none transition-all ${suggestion ? 'border-[#8ecb84] bg-[#f5faf4]' : 'border-[#ddd8ce]'}`}
+                  >
+                    <option value="lose">Weight Loss {suggestion === 'lose' ? '(Recommended)' : ''}</option>
+                    <option value="gain">Muscle Gain {suggestion === 'gain' ? '(Recommended)' : ''}</option>
+                    <option value="maintain">Maintenance {suggestion === 'maintain' ? '(Recommended)' : ''}</option>
                   </select>
                 </div>
 
@@ -239,13 +253,14 @@ const GenerateWeekly = () => {
                     <h4 className="text-[8px] font-bold uppercase tracking-widest text-[#5a7054]">AI Insight</h4>
                 </div>
                 <p className="text-[10px] leading-relaxed italic opacity-80">
-                    {suggestion ? `Model suggests ${suggestion.toUpperCase()} based on demographic peers.` : "Sync data for AI prediction."}
+                    {suggestion ? `Model recommends ${suggestion.toUpperCase()} based on your BMI category.` : "Sync data for AI prediction."}
                 </p>
               </div>
             </div>
           </div>
         </motion.div>
 
+        {/* RIGHT COLUMN: Weekly Plan Display */}
         <AnimatePresence>
           {isSubmitted && weeklyPlan && (
             <motion.div initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
@@ -280,6 +295,7 @@ const GenerateWeekly = () => {
                   </div>
                 </motion.div>
 
+                {/* 2. OTHER DAYS MINI CARDS */}
                 {days.map((day, idx) => {
                   if (idx === activeDayIdx) return null; 
                   return (
@@ -304,6 +320,7 @@ const GenerateWeekly = () => {
         </AnimatePresence>
       </div>
 
+      {/* Global Scrollbar Styles */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f5faf4; }
