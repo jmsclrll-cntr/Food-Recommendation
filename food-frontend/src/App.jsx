@@ -9,7 +9,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/Login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/generate-weekly" element={<GenerateWeekly />} />
@@ -17,6 +17,6 @@ function App() {
       </Routes>
     </Router>
   );
-}
+}   
 
 export default App;

@@ -140,9 +140,9 @@ const Dashboard = () => {
           className="h-[300px] relative rounded-xl overflow-hidden shadow-sm group"
         >
            <img 
-             src="https://images.unsplash.com/photo-1543332164-6e82f3553c46?auto=format&fit=crop&q=80&w=2000" 
+            //  src="https://images.unsplash.com/photo-1543332164-6e82f3553c46?auto=format&fit=crop&q=80&w=2000" 
              className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-             alt="Vibrant Greens"
+             
            />
            <div className="absolute inset-0 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent"></div>
            
