@@ -6,6 +6,7 @@ import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
 
+
 const EMOJIS = [
   { char: '🥗', size: '22px', top: '7%', left: '8%', delay: 0 },
   { char: '🍕', size: '24px', top: '15%', left: '25%', delay: 1.5 },
@@ -67,8 +68,14 @@ const Login = () => {
   const currentSlogan = SLOGANS[sloganIndex];
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 bg-[#f5faf4]">
-      <div className="w-full max-w-4xl bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px]">
+   <div
+  className="relative min-h-screen flex items-center justify-center p-4 sm:p-8 bg-cover bg-center"
+  style={{ backgroundImage: "url('/bg3.png')" }}
+>
+
+{/* Overlay */}
+  <div className="absolute inset-0 bg-black/40 z-0"></div>
+       <div className="relative z-10 w-full max-w-4xl bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px]">
         
         {/* Left Panel */}
         <div className="relative w-full md:w-[42%] bg-[#1c3a1c] p-8 md:p-10 flex flex-col justify-between overflow-hidden text-white">
@@ -88,8 +95,12 @@ const Login = () => {
           ))}
 
           <div className="relative z-20">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center p-2 shadow-lg mb-4 border border-white/10 group overflow-hidden">
-              <span className="text-2xl group-hover:scale-110 transition-transform">🐼</span>
+             <div className="flex items-center justify-left">
+              <img
+                src="/webLogo.png"
+                alt="Logo"
+                className="w-10 h-10 object-contain group-hover:scale-110 transition-transform"
+              />
             </div>
             <h2 className="font-serif text-2xl font-semibold text-[#e8f4e5] leading-none mb-1 text-shadow-sm">NutriFind</h2>
             <p className="text-[9px] text-[#6a9966] uppercase tracking-[0.2em] font-black">Premium Nutrition</p>
