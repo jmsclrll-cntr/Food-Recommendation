@@ -7,6 +7,7 @@ const recommendationRoutes = require('./routes/recommendationRoutes');
 const healthRoutes = require('./routes/healthRoutes'); 
 const { syncMLData } = require('./ml/mlDataService');
 
+
 // --- FIREBASE INITIALIZATION (THIS WAS THE MISSING PART) ---
 const serviceAccount = require('./serviceAccountKey.json');
 if (!admin.apps.length) {

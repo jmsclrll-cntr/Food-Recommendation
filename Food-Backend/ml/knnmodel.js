@@ -25,3 +25,20 @@ exports.recommendGoal = (userGender, userBmi) => {
         frequency: counts[mostFrequent]
     };
 };
+
+
+exports.recommendFoodKNN = (foodPool, targetCalories, k = 5) => {
+    if (!foodPool || foodPool.length === 0) return [];
+
+    // Calculate distance (difference in calories)
+    const scoredFoods = foodPool.map(food => ({
+        ...food,
+        distance: Math.abs((food.calories || 0) - targetCalories)
+    }));
+
+    // Sort from closest to farthest
+    scoredFoods.sort((a, b) => a.distance - b.distance);
+
+    // Return the top K closest matches
+    return scoredFoods.slice(0, k);
+};

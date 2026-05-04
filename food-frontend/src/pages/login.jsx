@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Moon, Sun } from 'lucide-react';
 import axios from 'axios';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
@@ -32,7 +32,15 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-  // Handle slogan loop and animation key
+  // DARK MODE LOGIC
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('theme') === 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setSloganIndex((prev) => (prev + 1) % SLOGANS.length);
@@ -66,14 +74,38 @@ const Login = () => {
 
   const currentSlogan = SLOGANS[sloganIndex];
 
+  // THEME HELPERS
+  const panelBg = darkMode ? 'bg-[#121212]' : 'bg-[#fdfdfc]';
+  const leftPanelBg = darkMode ? 'bg-[#0f210f]' : 'bg-[#1c3a1c]';
+  const textMain = darkMode ? 'text-white' : 'text-[#1c3a1c]';
+  const textSub = darkMode ? 'text-white/60' : 'text-[#5a7054]';
+  const inputBg = darkMode ? 'bg-white/5' : 'bg-white';
+  const border = darkMode ? 'border-white/10' : 'border-[#ddd8ce]';
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 bg-[#f5faf4]">
-      <div className="w-full max-w-4xl bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px]">
+    <div
+      className="relative min-h-screen flex items-center justify-center p-4 sm:p-8 bg-cover bg-center transition-colors duration-500"
+      style={{ backgroundImage: "url('/bg4.png')" }}
+    >
+      {/* Dynamic Overlay */}
+      <div className={`absolute inset-0 z-0 transition-opacity duration-500 ${darkMode ? 'bg-black/70' : 'bg-black/40'}`}></div>
+
+      <div className={`relative z-10 w-full max-w-4xl ${panelBg} rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px] transition-colors duration-500`}>
         
+        {/* Theme Toggle Button (Absolute Positioned) */}
+        <button
+          onClick={() => setDarkMode(!darkMode)}
+          className={`absolute top-6 right-6 z-30 p-2 rounded-full backdrop-blur-md transition-all ${
+            darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/5 text-gray-600 hover:bg-black/10'
+          }`}
+        >
+          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
         {/* Left Panel */}
-        <div className="relative w-full md:w-[42%] bg-[#1c3a1c] p-8 md:p-10 flex flex-col justify-between overflow-hidden text-white">
-          <div className="absolute top-[-80px] right-[-80px] w-72 h-72 rounded-full bg-[#2a5228] z-0" />
-          <div className="absolute bottom-[-40px] left-[-40px] w-48 h-48 rounded-full bg-[#243f24] z-0" />
+        <div className={`relative w-full md:w-[42%] ${leftPanelBg} p-8 md:p-10 flex flex-col justify-between overflow-hidden text-white transition-colors duration-500`}>
+          <div className="absolute top-[-80px] right-[-80px] w-72 h-72 rounded-full bg-[#2a5228]/50 z-0" />
+          <div className="absolute bottom-[-40px] left-[-40px] w-48 h-48 rounded-full bg-[#243f24]/50 z-0" />
 
           {EMOJIS.map((emoji, index) => (
             <motion.span
@@ -88,10 +120,14 @@ const Login = () => {
           ))}
 
           <div className="relative z-20">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center p-2 shadow-lg mb-4 border border-white/10 group overflow-hidden">
-              <span className="text-2xl group-hover:scale-110 transition-transform">🐼</span>
+             <div className="flex items-center justify-left">
+              <img
+                src="/webLogo.png"
+                alt="Logo"
+                className="w-10 h-10 object-contain"
+              />
             </div>
-            <h2 className="font-serif text-2xl font-semibold text-[#e8f4e5] leading-none mb-1 text-shadow-sm">NutriFind</h2>
+            <h2 className="font-serif text-2xl font-semibold text-[#e8f4e5] leading-none mb-1">NutriFind</h2>
             <p className="text-[9px] text-[#6a9966] uppercase tracking-[0.2em] font-black">Premium Nutrition</p>
           </div>
 
@@ -109,14 +145,11 @@ const Login = () => {
                 exit={{ opacity: 0, x: -20, transition: { duration: 0.4 } }}
                 className="font-serif text-3xl md:text-4xl font-normal text-[#e8f4e5] leading-tight mb-6 flex flex-wrap"
               >
-                {/* Dynamic Prefix */}
                 {currentSlogan.prefix.split("").map((char, index) => (
                   <motion.span key={`p-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8 }, visible: { opacity: 1, scale: 1 } }} className="inline-block">
                     {char === " " ? "\u00A0" : char}
                   </motion.span>
                 ))}
-
-                {/* Dynamic Accent (Italic) */}
                 <span className="italic text-[#8ecb84]">
                   {currentSlogan.accent.split("").map((char, index) => (
                     <motion.span key={`a-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8, rotate: -10 }, visible: { opacity: 1, scale: 1, rotate: 0 } }} className="inline-block">
@@ -124,8 +157,6 @@ const Login = () => {
                     </motion.span>
                   ))}
                 </span>
-
-                {/* Dynamic Suffix */}
                 {currentSlogan.suffix.split("").map((char, index) => (
                   <motion.span key={`s-${index}`} variants={{ hidden: { opacity: 0, scale: 0.8 }, visible: { opacity: 1, scale: 1 } }} className="inline-block">
                     {char === " " ? "\u00A0" : char}
@@ -147,31 +178,38 @@ const Login = () => {
         </div>
 
         {/* Right Panel */}
-        <div className="flex-1 bg-[#fdfdfc] p-8 md:p-12 flex flex-col justify-center">
+        <div className="flex-1 p-8 md:p-12 flex flex-col justify-center transition-colors duration-500">
           <div className="max-w-md mx-auto w-full">
-            <h2 className="font-serif text-3xl text-[#1c3a1c] mb-1">Welcome Back</h2>
-            <p className="text-sm text-[#5a7054] mb-8 italic">Premium Nutrition</p>
+            <h2 className={`font-serif text-3xl ${textMain} mb-1 transition-colors`}>Welcome Back</h2>
+            <p className={`text-sm ${textSub} mb-8 italic transition-colors`}>Premium Nutrition</p>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold uppercase tracking-widest text-[#5a7054]">Email address</label>
+                <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Email address</label>
                 <div className="relative group">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-[#1c3a1c]/40 group-focus-within:text-[#8ecb84] transition-colors" />
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full h-12 pl-11 pr-4 bg-white border border-[#ddd8ce] rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm" />
+                  <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                  <input 
+                    type="email" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    placeholder="Email" 
+                    required 
+                    className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain}`} 
+                  />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold uppercase tracking-widest text-[#5a7054]">Password</label>
+                <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Password</label>
                 <div className="relative group">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-[#1c3a1c]/40 group-focus-within:text-[#8ecb84] transition-colors" />
+                  <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
                   <input 
                     type={showPassword ? "text" : "password"} 
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)} 
                     placeholder="••••••••" 
                     required 
-                    className="w-full h-12 pl-11 pr-11 bg-white border border-[#ddd8ce] rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm" 
+                    className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain}`} 
                   />
                   <button 
                     type="button"
@@ -189,16 +227,19 @@ const Login = () => {
             </form>
 
             <div className="flex items-center gap-4 py-6">
-              <div className="h-[1px] flex-1 bg-[#e4dfd5]" />
+              <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
               <span className="text-[10px] font-bold text-[#b0a898] tracking-widest uppercase">OR</span>
-              <div className="h-[1px] flex-1 bg-[#e4dfd5]" />
+              <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
             </div>
 
-            <button onClick={handleGoogle} className="w-full h-12 bg-white hover:bg-[#f5faf4] border-2 border-[#c8c2b8] hover:border-[#8ecb84] rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6">
+            <button 
+              onClick={handleGoogle} 
+              className={`w-full h-12 ${darkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#c8c2b8] hover:bg-[#f5faf4]'} border-2 rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6`}
+            >
               <svg width="18" height="18" viewBox="0 0 48 48">
                 <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.6-6.6C35.4 2.7 30 .5 24 .5 14.7.5 6.7 6.1 3 14l7.8 6c1.9-5.5 7-9.5 13.2-9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.6A14.4 14.4 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.5 13.4A23.5 23.5 0 0 0 .5 24c0 3.8.9 7.4 2.5 10.6l7.8-6z"/><path fill="#34A853" d="M24 47.5c6 0 11-2 14.7-5.3l-7.5-5.8c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.4-4.2-13.2-9.9l-7.8 6C6.6 41.9 14.7 47.5 24 47.5z"/>
               </svg>
-              <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Continue with Google</span>
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-white/80' : 'text-gray-600'}`}>Continue with Google</span>
             </button>
 
             <p className="text-center text-[9px] text-gray-400 font-bold uppercase tracking-widest">
