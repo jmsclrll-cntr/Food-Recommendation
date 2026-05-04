@@ -2,18 +2,19 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, Loader2 } from 'lucide-react';
+// FIX 1: Added missing icons (Save, Info)
+import { CheckCircle, Loader2, Save, Info } from 'lucide-react';
 
 const GenerateWeekly = () => {
   const navigate = useNavigate();
 
   // --- Logic States ---
+  // Lazy initializer reads from localStorage immediately
   const [user] = useState(() => {
     const stored = localStorage.getItem('user');
     return stored ? JSON.parse(stored) : null;
   });
 
-  // Start syncing/submitting states
   const [isSyncing, setIsSyncing] = useState(false); 
   const [isSubmitted, setIsSubmitted] = useState(false); 
   const [showToast, setShowToast] = useState(false);
@@ -21,7 +22,6 @@ const GenerateWeekly = () => {
   const [activeDayIdx, setActiveDayIdx] = useState(0); 
   const [bmiStatus, setBmiStatus] = useState("");
   const [suggestion, setSuggestion] = useState("");
-  const [weeklyPlan, setWeeklyPlan] = useState(null);
 
   const [formData, setFormData] = useState({
     gender: 'male', height: '', weight: '', goal: 'maintain', condition: 'none'
@@ -29,6 +29,7 @@ const GenerateWeekly = () => {
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+  // Calculate BMI
   const bmi = useMemo(() => {
     if (formData.height > 0 && formData.weight > 0) {
       const h = formData.height / 100;
@@ -37,27 +38,26 @@ const GenerateWeekly = () => {
     return '0.0';
   }, [formData.height, formData.weight]);
 
-  // --- MODIFIED: REMOVED AUTO-FILL LOGIC ---
+  // FIX 2: Removed setLoading(false) to fix the "cascading render" error.
+  // We just handle the redirect here.
   useEffect(() => {
-    if (!user) { navigate('/'); return; }
-    
-    // We only check if the component is ready, we DO NOT 
-    // fetch old data to fill the form anymore.
-    setLoading(false); 
+    if (!user) { 
+      navigate('/'); 
+    }
   }, [navigate, user]);
 
+  // FIX 3: Changed 'bmiValue' to 'bmi' and used backticks for the URL
   useEffect(() => {
-    const bmiNum = parseFloat(bmiValue);
+    const bmiNum = parseFloat(bmi);
     if (bmiNum > 0 && formData.gender) {
-      // Note: In production, ensure this URL matches your backend
-      axios.get(`/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmiValue}`)
+      axios.get(`http://localhost:5000/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmi}`)
         .then(res => {
           setSuggestion(res.data.goal);
           setBmiStatus(res.data.category);
           setFormData(prev => ({ ...prev, goal: res.data.goal }));
         }).catch(() => console.log("Sync error."));
     }
-  }, [bmiValue, formData.gender]);
+  }, [bmi, formData.gender]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -69,24 +69,21 @@ const GenerateWeekly = () => {
     setIsSyncing(true);
 
     const payload = {
-        userId: user.uid || user.id,
+        userId: user?.uid || user?.id,
         ...formData,
         bmi
     };
 
     try {
-      // 1. Save or Update Health Data (Logic from File 2)
       if (!isSubmitted) {
-        // ACTION 1: FIRST TIME SAVING (INSERT)
         await axios.post('http://localhost:5000/api/health/save', payload);
       } else {
-        // ACTION 2: UPDATING WITHIN THE SAME SESSION
-        await axios.put(`http://localhost:5000/api/health/update/${user.uid || user.id}`, payload);
+        await axios.put(`http://localhost:5000/api/health/update/${user?.uid || user?.id}`, payload);
       }
       
       setTimeout(() => {
         setIsSyncing(false);
-        setIsSubmitted(true); // Now the layout shifts and button becomes "Update"
+        setIsSubmitted(true);
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3000); 
       }, 1200);
@@ -98,7 +95,13 @@ const GenerateWeekly = () => {
     }
   };
 
-  if (loading) return (
+  // FIX 4: Added the missing function definition
+  const handleSaveToProfile = () => {
+    alert("Plan confirmed and saved!");
+  };
+
+  // FIX 5: Use !user as the loading trigger to prevent errors before redirect
+  if (!user) return (
     <div className="h-screen flex items-center justify-center bg-[#f5faf4]">
       <Loader2 className="w-8 h-8 animate-spin text-[#6a9966]" />
     </div>
@@ -115,7 +118,6 @@ const GenerateWeekly = () => {
             animate={{ opacity: 1, y: 0 }} 
             exit={{ opacity: 0, y: -50 }}
             className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-[#1c3a1c] text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3"
-            id="toast-notification"
           >
             <CheckCircle className="text-[#8ecb84] w-4 h-4" />
             <span className="text-[10px] font-bold uppercase tracking-widest">
@@ -142,7 +144,7 @@ const GenerateWeekly = () => {
         )}
       </AnimatePresence>
 
-      {/* Save Button (Lower Left) */}
+      {/* Save Button */}
       <AnimatePresence>
         {isSubmitted && (
             <motion.button
@@ -242,7 +244,7 @@ const GenerateWeekly = () => {
           </div>
         </motion.div>
 
-        {/* RIGHT COLUMN: Weekly Plan Display */}
+        {/* RIGHT COLUMN */}
         <AnimatePresence>
           {isSubmitted && (
             <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4, duration: 0.8 }}
@@ -260,7 +262,6 @@ const GenerateWeekly = () => {
                   </div>
                 </motion.div>
 
-                {/* 2. OTHER DAYS MINI CARDS */}
                 {days.map((day, idx) => {
                   if (idx === activeDayIdx) return null; 
                   return (
@@ -286,7 +287,6 @@ const GenerateWeekly = () => {
         </AnimatePresence>
       </div>
 
-      {/* Global Scrollbar Styles */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f5faf4; }

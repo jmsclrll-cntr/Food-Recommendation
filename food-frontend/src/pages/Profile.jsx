@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'; // FIX 1: Removed unused 'React' import
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -16,30 +16,39 @@ import {
 
 const Profile = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+
+  // FIX 2: Initialize state directly from localStorage (Lazy Initializer)
+  // This fixes the "cascading renders" error.
+  const [user] = useState(() => {
+    const data = localStorage.getItem('user');
+    return data ? JSON.parse(data) : null;
+  });
 
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
   });
 
+  // Simplified useEffect to only handle redirection
   useEffect(() => {
-    const data = localStorage.getItem('user');
-    if (!data) return navigate('/');
-    setUser(JSON.parse(data));
-  }, [navigate]);
+    if (!user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
+  // Prevent crashing if user isn't found
   if (!user) return null;
 
-  // THEME HELPERS (Matched to Login/Signup Palette)
+  // THEME HELPERS
   const cardBg = darkMode ? 'bg-[#121212]/90' : 'bg-white/90';
   const border = darkMode ? 'border-white/10' : 'border-[#ddd8ce]';
   const textMain = darkMode ? 'text-white' : 'text-[#1c3a1c]';
   const textSub = darkMode ? 'text-white/60' : 'text-[#5a7054]';
-  const accentGreen = '#8ecb84';
+  
+  // FIX 3: Removed 'accentGreen' as it was unused (clears lint warning)
 
   return (
     <div
@@ -152,8 +161,6 @@ const Profile = () => {
             transition={{ delay: 0.1 }}
             className="col-span-12 lg:col-span-8 space-y-8"
           >
-
-            {/* BIO */}
             <section className={`${cardBg} backdrop-blur-xl rounded-[2rem] p-8 ${border} border shadow-2xl transition-colors duration-500`}>
               <h3 className={`font-serif text-xl italic mb-4 ${textMain}`}>
                 Personal Narrative
@@ -163,14 +170,12 @@ const Profile = () => {
               </p>
             </section>
 
-            {/* METRICS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <InfoCard darkMode={darkMode} icon={<Weight size={20} />} label="Latest Weight" value="72.5 kg" />
               <InfoCard darkMode={darkMode} icon={<Ruler size={20} />} label="Last Height" value="178 cm" />
               <InfoCard darkMode={darkMode} icon={<Activity size={20} />} label="Avg. BMI" value="22.8" />
             </div>
 
-            {/* SETTINGS */}
             <div className={`${cardBg} backdrop-blur-xl rounded-[2rem] overflow-hidden ${border} border shadow-2xl transition-colors duration-500`}>
               <div className={`px-8 py-5 border-b ${border} bg-black/5`}>
                 <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#6a9966]">
@@ -179,7 +184,6 @@ const Profile = () => {
               </div>
 
               <div className="p-8 space-y-6">
-                {/* Switch 1 */}
                 <div className="flex justify-between items-center">
                   <div>
                     <p className={`text-sm font-bold ${textMain}`}>Email Notifications</p>
@@ -190,7 +194,6 @@ const Profile = () => {
                   </div>
                 </div>
 
-                {/* Switch 2 */}
                 <div className="flex justify-between items-center">
                   <div>
                     <p className={`text-sm font-bold ${textMain}`}>Public Profile</p>
@@ -213,7 +216,6 @@ const Profile = () => {
                 </div>
               </div>
             </div>
-
           </motion.div>
         </div>
       </div>
@@ -232,11 +234,9 @@ const InfoCard = ({ icon, label, value, darkMode }) => (
     <div className={`mb-5 transition-colors ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>
       {icon}
     </div>
-
     <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#6a9966] mb-1">
       {label}
     </p>
-
     <p className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-[#1c3a1c]'}`}>
       {value}
     </p>
