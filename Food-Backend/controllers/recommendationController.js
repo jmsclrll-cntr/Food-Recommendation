@@ -11,51 +11,116 @@ exports.getSuggestion = (req, res) => {
     }
 };
 
-exports.getWeeklySuggestion  = async (req, res) => {
+exports.getAlternatives = async (req, res) => {
     try {
-        // Ensure values are numbers
+        const { type, condition } = req.query;
+        const foodPool = await getFoodDatabase(condition);
+        const filtered = foodPool.filter(f => f.type?.toLowerCase() === type?.toLowerCase());
+        res.status(200).json(filtered);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getWeeklySuggestion = async (req, res) => {
+    try {
         const weight = parseFloat(req.body.weight);
         const height = parseFloat(req.body.height);
         const age = parseFloat(req.body.age || 25);
-        const { gender, goal, condition, bmi } = req.body;
+        const { gender, goal, condition } = req.body;
 
-        // 1. Calculate Target Calories (TDEE)
         let bmr = (10 * weight) + (6.25 * height) - (5 * age);
         bmr = (gender.toLowerCase() === 'male') ? bmr + 5 : bmr - 161;
         let tdee = bmr * 1.3; 
-
         if (goal === 'lose') tdee -= 500;
         if (goal === 'gain') tdee += 500;
 
-        // 2. Get Foods
         const foodPool = await getFoodDatabase(condition);
-        if (foodPool.length === 0) throw new Error("No suitable foods found.");
-
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         let weeklyPlan = {};
-        const targets = { breakfast: tdee * 0.3, lunch: tdee * 0.4, dinner: tdee * 0.3 };
+        let usedFoodIds = new Set(); // Track every individual food used across the entire week
 
-        days.forEach(day => {
-            const bPool = foodPool.filter(f => f.type === 'breakfast');
-            const lPool = foodPool.filter(f => f.type === 'lunch');
-            const dPool = foodPool.filter(f => f.type === 'dinner');
+        // Pre-filter pools once to save time
+        const bPool = foodPool.filter(f => f.type?.toLowerCase() === 'breakfast');
+        const lPool = foodPool.filter(f => f.type?.toLowerCase() === 'lunch');
+        const dPool = foodPool.filter(f => f.type?.toLowerCase() === 'dinner');
 
-            // Find closest matches
-            const bOptions = recommendFoodKNN(bPool.length > 0 ? bPool : foodPool, targets.breakfast);
-            const lOptions = recommendFoodKNN(lPool.length > 0 ? lPool : foodPool, targets.lunch);
-            const dOptions = recommendFoodKNN(dPool.length > 0 ? dPool : foodPool, targets.dinner);
+        days.forEach((day, dayIndex) => {
+
+            // Bias jitter significantly downwards (range: 85% to 95%) 
+            // This ensures main meals are always under the goal, leaving room for supplements.
+            const jitter = 0.85 + (Math.random() * 0.1);
+            const dayTdee = tdee * jitter;
+
+            // Pick main meals using KNN with exclusion + wider K for more options
+            const lTarget = dayTdee * (0.40 + Math.random() * 0.10);
+            const lCandidates = recommendFoodKNN(lPool, lTarget, 15, usedFoodIds);
+            const lunch = lCandidates[0] || recommendFoodKNN(lPool, lTarget, 15)[0];
+
+            const remaining = dayTdee - (lunch?.calories || 0);
+            const bRatio = 0.40 + (Math.random() * 0.20);
+            const bTarget = remaining * bRatio;
+            const dTarget = remaining * (1 - bRatio);
+
+            const bCandidates = recommendFoodKNN(bPool, bTarget, 15, usedFoodIds);
+            const breakfast = bCandidates[0] || recommendFoodKNN(bPool, bTarget, 15)[0];
+
+            const dCandidates = recommendFoodKNN(dPool, dTarget, 15, usedFoodIds);
+            const dinner = dCandidates[0] || recommendFoodKNN(dPool, dTarget, 15)[0];
+
+            let bItems = breakfast ? [breakfast] : [];
+            let lItems = lunch ? [lunch] : [];
+            let dItems = dinner ? [dinner] : [];
+
+            let currentTotal = (breakfast?.calories || 0) + (lunch?.calories || 0) + (dinner?.calories || 0);
+            let deficit = tdee - currentTotal;
+
+            // Fill deficit with supplements until within 50 kcal of target
+            // STRATEGY: Always stay UNDER the target. Only add if food.calories <= deficit.
+            while (deficit > 10) { 
+                const currentDayIds = new Set([...bItems, ...lItems, ...dItems].map(i => i.id).filter(Boolean));
+                const tempUsed = new Set([...usedFoodIds, ...currentDayIds]);
+                
+                // 1. Filter for foods that actually FIT in the remaining deficit
+                let candidates = foodPool.filter(f => f.calories > 0 && f.calories <= deficit);
+                
+                if (candidates.length === 0) break; // No foods small enough to fit
+
+                // 2. Try to find a UNIQUE one from the fitting candidates
+                let uniqueCandidates = candidates.filter(f => !tempUsed.has(f.id));
+                let poolToUse = uniqueCandidates.length > 0 ? uniqueCandidates : candidates;
+
+                // 3. Pick the largest food that still fits
+                poolToUse.sort((a, b) => b.calories - a.calories); 
+                let supplement = poolToUse[0];
+                
+                if (!supplement) break;
+
+                const type = supplement.type?.toLowerCase();
+                if (type === 'breakfast') bItems.push(supplement);
+                else if (type === 'lunch') lItems.push(supplement);
+                else dItems.push(supplement);
+
+                currentTotal += supplement.calories || 0;
+                deficit = tdee - currentTotal;
+            }
+
+            // Mark all selected foods as used globally
+            [...bItems, ...lItems, ...dItems].forEach(item => {
+                if (item?.id) usedFoodIds.add(item.id);
+            });
+
 
             weeklyPlan[day] = {
-                breakfast: bOptions[Math.floor(Math.random() * bOptions.length)],
-                lunch: lOptions[Math.floor(Math.random() * lOptions.length)],
-                dinner: dOptions[Math.floor(Math.random() * dOptions.length)],
-                dailyTotal: Math.round(tdee)
+                breakfast: bItems,
+                lunch: lItems,
+                dinner: dItems,
+                dailyTotal: Math.round(currentTotal)
             };
         });
 
-        res.status(200).json({ plan: weeklyPlan });
+        res.status(200).json({ plan: weeklyPlan, dailyTarget: Math.round(tdee) });
     } catch (error) {
-        console.error("Plan Error:", error.message);
         res.status(500).json({ error: error.message });
     }
 };

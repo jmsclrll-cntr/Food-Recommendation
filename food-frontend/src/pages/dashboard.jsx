@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -365,6 +365,24 @@ const Stat = ({ label, value, subtitle }) => (
     <p className="stat-sub">{subtitle}</p>
   </div>
 );
+import { motion, AnimatePresence } from 'framer-motion';
+import { LogOut, User, Droplets, ArrowRight, CheckCircle2, Circle, Loader2, Utensils, Eye } from 'lucide-react';
+import axios from 'axios';
+
+// Animation Variants for a high-end feel
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.15, delayChildren: 0.1 }
+  },
+  exit: { opacity: 0, y: 20, transition: { duration: 0.3 } }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100, damping: 15 } }
+};
 
 const DonutRing = ({ pct, size = 110, stroke = 9, color = 'var(--sage)', trackColor = 'rgba(143,175,126,0.12)', children }) => {
   const r = (size - stroke) / 2;
@@ -445,7 +463,16 @@ const Dashboard = () => {
   });
 
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [dailyDiet, setDailyDiet] = useState(null);
+  const [loadingDiet, setLoadingDiet] = useState(true);
+  const [completedMeals, setCompletedMeals] = useState({
+    breakfast: false,
+    lunch: false,
+    dinner: false
+  });
   const navigate = useNavigate();
+
+  const today = useMemo(() => new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()), []);
 
   useEffect(() => {
     if (!user) navigate('/');
@@ -454,6 +481,44 @@ const Dashboard = () => {
   useEffect(() => {
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
   }, [isDark]);
+    const data = localStorage.getItem('user');
+    if (!data) return navigate('/');
+    const parsedUser = JSON.parse(data);
+    setUser(parsedUser);
+
+    // Fetch daily diet from the new backend endpoint
+    const userId = parsedUser.id || parsedUser.uid || parsedUser._id;
+    axios.get(`http://localhost:5000/api/diets/day/${today}/${userId}`)
+      .then(res => {
+        setDailyDiet(res.data.meals);
+        setLoadingDiet(false);
+      })
+      .catch(err => {
+        console.error("No plan for today:", err);
+        setLoadingDiet(false);
+      });
+      
+    // Load local progress if available
+    const savedProgress = localStorage.getItem(`progress_${today}_${userId}`);
+    if (savedProgress) setCompletedMeals(JSON.parse(savedProgress));
+  }, [navigate, today]);
+
+  const toggleMeal = (mealType) => {
+    const nextState = { ...completedMeals, [mealType]: !completedMeals[mealType] };
+    setCompletedMeals(nextState);
+    const userId = user.id || user.uid || user._id;
+    localStorage.setItem(`progress_${today}_${userId}`, JSON.stringify(nextState));
+  };
+
+  const progressPercentage = useMemo(() => {
+    const completed = Object.values(completedMeals).filter(Boolean).length;
+    return Math.round((completed / 3) * 100);
+  }, [completedMeals]);
+
+  // Handler for smooth navigation
+  const handleNav = (path) => {
+    navigate(path);
+  };
 
   if (!user) return null;
 
