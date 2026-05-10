@@ -1,14 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Calendar, Utensils, Zap, Loader2, Info, ChevronRight, ChevronLeft } from 'lucide-react';
+import { 
+    ArrowLeft, Calendar, Utensils, Zap, Loader2, Info, 
+    ChevronRight, ChevronLeft, Sun, Moon 
+} from 'lucide-react';
 import axios from 'axios';
 
 const ViewWeekly = () => {
+    const navigate = useNavigate();
     const [weeklyPlan, setWeeklyPlan] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeDayIdx, setActiveDayIdx] = useState(0);
-    const navigate = useNavigate();
+
+    // --- DARK MODE LOGIC ---
+    const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+
+    useEffect(() => {
+        localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+    }, [darkMode]);
+
+    // THEME HELPERS
+    const bgMain = darkMode ? 'bg-[#0d110d]' : 'bg-[#f5faf4]';
+    const cardBg = darkMode ? 'bg-[#1a1c1a]' : 'bg-white';
+    const border = darkMode ? 'border-white/10' : 'border-[#ddd8ce]';
+    const textMain = darkMode ? 'text-white' : 'text-[#1c3a1c]';
+    const textSub = darkMode ? 'text-white/60' : 'text-[#5a7054]';
+    const accentText = darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]';
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -30,16 +48,16 @@ const ViewWeekly = () => {
     }, [navigate]);
 
     if (loading) return (
-        <div className="h-screen flex flex-col items-center justify-center bg-[#f5faf4]">
+        <div className={`h-screen flex flex-col items-center justify-center ${bgMain}`}>
             <Loader2 className="animate-spin text-[#6a9966] mb-4" size={32} />
             <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#6a9966]">Loading Your Protocol</p>
         </div>
     );
 
     if (!weeklyPlan) return (
-        <div className="h-screen flex flex-col items-center justify-center bg-[#f5faf4] text-center p-10">
-            <h2 className="font-serif text-3xl italic mb-4">No Weekly Plan Found</h2>
-            <p className="text-sm text-gray-500 mb-8">You haven't saved a weekly plan yet. Generate one to get started.</p>
+        <div className={`h-screen flex flex-col items-center justify-center ${bgMain} text-center p-10`}>
+            <h2 className={`font-serif text-3xl italic mb-4 ${textMain}`}>No Weekly Plan Found</h2>
+            <p className={`text-sm mb-8 ${textSub}`}>You haven't saved a weekly plan yet. Generate one to get started.</p>
             <button onClick={() => navigate('/generate-weekly')} className="bg-[#2d5a27] text-white px-8 py-4 rounded-xl font-bold text-[10px] uppercase tracking-[0.3em]">Generate Now</button>
         </div>
     );
@@ -48,24 +66,38 @@ const ViewWeekly = () => {
     const currentDayPlan = weeklyPlan[activeDay];
 
     return (
-        <div className="h-screen w-full bg-[#f5faf4] text-[#1c3a1c] p-10 flex flex-col overflow-hidden">
+        <div className={`h-screen w-full ${bgMain} ${textMain} p-10 flex flex-col overflow-hidden transition-colors duration-500`}>
+            
             {/* Header */}
-            <header className="flex justify-between items-center mb-10 flex-shrink-0">
+            <header className="flex justify-between items-center mb-10 flex-shrink-0 relative z-50">
                 <div className="flex items-center gap-6">
-                    <button onClick={() => navigate('/dashboard')} className="p-3 bg-white rounded-full border border-[#ddd8ce] hover:border-[#2d5a27] transition-all group">
-                        <ArrowLeft size={18} className="group-hover:text-[#2d5a27]" />
+                    <button onClick={() => navigate('/dashboard')} className={`p-3 ${cardBg} rounded-full border ${border} hover:border-[#2d5a27] transition-all group`}>
+                        <ArrowLeft size={18} className={`group-hover:text-[#2d5a27] ${darkMode ? 'text-white' : 'text-black'}`} />
                     </button>
                     <div>
                         <h1 className="font-serif text-3xl italic">Weekly Protocol</h1>
                         <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966]">Comprehensive Nutrition Overview</p>
                     </div>
                 </div>
-                <div className="bg-white px-6 py-3 rounded-2xl border border-[#ddd8ce] flex items-center gap-4">
-                    <div className="text-right">
-                        <p className="text-[8px] font-black uppercase text-gray-400">Current Day</p>
-                        <p className="text-sm font-bold">{activeDay}</p>
+
+                <div className="flex items-center gap-4">
+                    <div className={`${cardBg} px-6 py-3 rounded-2xl border ${border} flex items-center gap-4 transition-colors`}>
+                        <div className="text-right">
+                            <p className="text-[8px] font-black uppercase opacity-40">Current Day</p>
+                            <p className="text-sm font-bold">{activeDay}</p>
+                        </div>
+                        <Calendar className={accentText} size={20} />
                     </div>
-                    <Calendar className="text-[#2d5a27]" size={20} />
+
+                    {/* Dark Mode Toggle */}
+                    <button
+                        onClick={() => setDarkMode(!darkMode)}
+                        className={`p-3 rounded-xl backdrop-blur-md transition-all ${
+                            darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/10 text-[#1c3a1c] hover:bg-black/5'
+                        }`}
+                    >
+                        {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+                    </button>
                 </div>
             </header>
 
@@ -76,13 +108,16 @@ const ViewWeekly = () => {
                         <button 
                             key={day} 
                             onClick={() => setActiveDayIdx(idx)}
-                            className={`w-full p-6 rounded-2xl border-2 transition-all text-left flex items-center justify-between group ${activeDayIdx === idx ? 'border-[#2d5a27] bg-[#1c3a1c] text-white shadow-lg' : 'border-[#ddd8ce] bg-white hover:border-[#2d5a27]'}`}
+                            className={`w-full p-6 rounded-2xl border-2 transition-all text-left flex items-center justify-between group 
+                                ${activeDayIdx === idx 
+                                    ? 'border-[#2d5a27] bg-[#1c3a1c] text-white shadow-lg' 
+                                    : `${border} ${cardBg} hover:border-[#2d5a27]`}`}
                         >
                             <div>
                                 <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${activeDayIdx === idx ? 'text-[#8ecb84]' : 'text-[#6a9966]'}`}>Day 0{idx+1}</p>
-                                <p className="font-serif text-xl italic">{day}</p>
+                                <p className={`font-serif text-xl italic ${activeDayIdx === idx ? 'text-white' : textMain}`}>{day}</p>
                             </div>
-                            <div className={`p-2 rounded-lg transition-colors ${activeDayIdx === idx ? 'bg-[#2d5a27]' : 'bg-[#f5faf4] text-[#2d5a27]'}`}>
+                            <div className={`p-2 rounded-lg transition-colors ${activeDayIdx === idx ? 'bg-[#2d5a27]' : 'bg-black/5 text-[#2d5a27]'}`}>
                                 {activeDayIdx === idx ? <Zap size={14} /> : <ChevronRight size={14} />}
                             </div>
                         </button>
@@ -90,8 +125,8 @@ const ViewWeekly = () => {
                 </div>
 
                 {/* Day Details View */}
-                <div className="col-span-9 bg-white rounded-[40px] border border-[#ddd8ce] shadow-sm flex flex-col overflow-hidden relative">
-                    <div className="p-10 border-b flex justify-between items-center bg-[#fbfdfa]">
+                <div className={`${cardBg} col-span-9 rounded-[40px] border ${border} shadow-sm flex flex-col overflow-hidden relative transition-colors`}>
+                    <div className={`p-10 border-b ${border} flex justify-between items-center ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-[#2d5a27] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#2d5a27]/20">
                                 <Utensils size={24} />
@@ -99,8 +134,8 @@ const ViewWeekly = () => {
                             <h2 className="font-serif text-4xl italic">{activeDay}'s Schedule</h2>
                         </div>
                         <div className="flex gap-4">
-                            <button onClick={() => setActiveDayIdx(prev => Math.max(0, prev - 1))} disabled={activeDayIdx === 0} className="p-4 bg-white border rounded-2xl hover:bg-gray-50 disabled:opacity-30"><ChevronLeft size={20}/></button>
-                            <button onClick={() => setActiveDayIdx(prev => Math.min(6, prev + 1))} disabled={activeDayIdx === 6} className="p-4 bg-white border rounded-2xl hover:bg-gray-50 disabled:opacity-30"><ChevronRight size={20}/></button>
+                            <button onClick={() => setActiveDayIdx(prev => Math.max(0, prev - 1))} disabled={activeDayIdx === 0} className={`p-4 ${cardBg} border ${border} rounded-2xl hover:opacity-70 disabled:opacity-30`}><ChevronLeft size={20}/></button>
+                            <button onClick={() => setActiveDayIdx(prev => Math.min(6, prev + 1))} disabled={activeDayIdx === 6} className={`p-4 ${cardBg} border ${border} rounded-2xl hover:opacity-70 disabled:opacity-30`}><ChevronRight size={20}/></button>
                         </div>
                     </div>
 
@@ -108,7 +143,7 @@ const ViewWeekly = () => {
                         <div className="grid grid-cols-3 gap-8">
                             {['breakfast', 'lunch', 'dinner'].map((type) => (
                                 <div key={type} className="space-y-6">
-                                    <div className="flex items-center gap-3 border-b pb-4">
+                                    <div className={`flex items-center gap-3 border-b ${border} pb-4`}>
                                         <span className="w-2 h-2 rounded-full bg-[#8ecb84]"></span>
                                         <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#6a9966]">{type}</h3>
                                     </div>
@@ -118,11 +153,11 @@ const ViewWeekly = () => {
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 key={mIdx} 
-                                                className="bg-[#f5faf4] p-5 rounded-3xl border border-[#8ecb84]/20 group hover:border-[#8ecb84] transition-all"
+                                                className={`${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'} p-5 rounded-3xl border ${border} group hover:border-[#8ecb84] transition-all`}
                                             >
                                                 <div className="flex justify-between items-start mb-3">
-                                                    <p className="text-sm font-bold text-[#1c3a1c] leading-tight flex-1">{meal.name}</p>
-                                                    <p className="text-[10px] font-black text-[#2d5a27] bg-white px-2 py-1 rounded-lg ml-2">{meal.calories} kcal</p>
+                                                    <p className={`text-sm font-bold leading-tight flex-1 ${textMain}`}>{meal.name}</p>
+                                                    <p className={`text-[10px] font-black ${darkMode ? 'bg-black/40 text-[#8ecb84]' : 'bg-white text-[#2d5a27]'} px-2 py-1 rounded-lg ml-2`}>{meal.calories} kcal</p>
                                                 </div>
                                                 <div className="flex items-center gap-4 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                                                     <span className="flex items-center gap-1"><Zap size={10} className="text-[#8ecb84]"/> {meal.grams}g</span>
@@ -131,7 +166,7 @@ const ViewWeekly = () => {
                                             </motion.div>
                                         ))}
                                         {(!currentDayPlan?.[type] || currentDayPlan[type].length === 0) && (
-                                            <div className="py-10 text-center border-2 border-dashed rounded-3xl opacity-30">
+                                            <div className="py-10 text-center border-2 border-dashed border-white/10 rounded-3xl opacity-30">
                                                 <p className="text-[9px] font-black uppercase">No meals defined</p>
                                             </div>
                                         )}
