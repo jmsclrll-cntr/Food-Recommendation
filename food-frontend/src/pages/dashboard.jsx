@@ -501,7 +501,7 @@ const Dashboard = () => {
     // Load local progress if available
     const savedProgress = localStorage.getItem(`progress_${today}_${userId}`);
     if (savedProgress) setCompletedMeals(JSON.parse(savedProgress));
-  }, [navigate, today]);
+  }, [navigate, today];
 
   const toggleMeal = (mealType) => {
     const nextState = { ...completedMeals, [mealType]: !completedMeals[mealType] };
@@ -807,6 +807,6 @@ const Dashboard = () => {
       </div>
     </>
   );
-};
+;
 
 export default Dashboard;
