@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { LogOut, User, Droplets, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { LogOut, User, Droplets, ArrowRight, CheckCircle2, Circle, Loader2, Utensils, Eye } from 'lucide-react';
+import axios from 'axios';
 
 // Animation Variants for a high-end feel
 const containerVariants = {
@@ -25,17 +26,54 @@ const sidebarVariants = {
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
+  const [dailyDiet, setDailyDiet] = useState(null);
+  const [loadingDiet, setLoadingDiet] = useState(true);
+  const [completedMeals, setCompletedMeals] = useState({
+    breakfast: false,
+    lunch: false,
+    dinner: false
+  });
   const navigate = useNavigate();
+
+  const today = useMemo(() => new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()), []);
 
   useEffect(() => {
     const data = localStorage.getItem('user');
     if (!data) return navigate('/');
-    setUser(JSON.parse(data));
-  }, [navigate]);
+    const parsedUser = JSON.parse(data);
+    setUser(parsedUser);
+
+    // Fetch daily diet from the new backend endpoint
+    const userId = parsedUser.id || parsedUser.uid || parsedUser._id;
+    axios.get(`http://localhost:5000/api/diets/day/${today}/${userId}`)
+      .then(res => {
+        setDailyDiet(res.data.meals);
+        setLoadingDiet(false);
+      })
+      .catch(err => {
+        console.error("No plan for today:", err);
+        setLoadingDiet(false);
+      });
+      
+    // Load local progress if available
+    const savedProgress = localStorage.getItem(`progress_${today}_${userId}`);
+    if (savedProgress) setCompletedMeals(JSON.parse(savedProgress));
+  }, [navigate, today]);
+
+  const toggleMeal = (mealType) => {
+    const nextState = { ...completedMeals, [mealType]: !completedMeals[mealType] };
+    setCompletedMeals(nextState);
+    const userId = user.id || user.uid || user._id;
+    localStorage.setItem(`progress_${today}_${userId}`, JSON.stringify(nextState));
+  };
+
+  const progressPercentage = useMemo(() => {
+    const completed = Object.values(completedMeals).filter(Boolean).length;
+    return Math.round((completed / 3) * 100);
+  }, [completedMeals]);
 
   // Handler for smooth navigation
   const handleNav = (path) => {
-    // We can add a slight delay or animation trigger here if needed
     navigate(path);
   };
 
@@ -86,8 +124,8 @@ const Dashboard = () => {
           
           <div className="pt-6 border-t border-[#f5faf4] w-full flex justify-around">
             <div className="text-center">
-                <p className="text-[8px] font-black uppercase tracking-widest text-[#5a7054] mb-1">Goal Status</p>
-                <p className="text-sm font-bold">92%</p>
+                <p className="text-[8px] font-black uppercase tracking-widest text-[#5a7054] mb-1">Today's Focus</p>
+                <p className="text-sm font-bold">{progressPercentage}%</p>
             </div>
             <div className="text-center">
                 <p className="text-[8px] font-black uppercase tracking-widest text-[#5a7054] mb-1">Streak</p>
@@ -151,46 +189,95 @@ const Dashboard = () => {
              <h1 className="font-serif text-5xl italic text-white leading-[1.1] mb-8">
                Sophisticated <br/> organic wellness.
              </h1>
-                <motion.button 
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleNav('/generate-weekly')}
-                    className="w-fit bg-[#2d5a27] text-white px-8 py-4 rounded-lg text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-[#1c3a1c] transition-all flex items-center gap-3 shadow-xl"
-                >
-                    Generate Weekly Diet Plan
-                    <ArrowRight size={14} />
-                </motion.button>
+                <div className="flex gap-4">
+                  <motion.button 
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleNav('/generate-weekly')}
+                      className="w-fit bg-[#2d5a27] text-white px-8 py-4 rounded-lg text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-[#1c3a1c] transition-all flex items-center gap-3 shadow-xl"
+                  >
+                      Generate Weekly Diet Plan
+                      <ArrowRight size={14} />
+                  </motion.button>
+
+                  <motion.button 
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleNav('/view-weekly')}
+                      className="w-fit bg-white/10 backdrop-blur-md text-white border border-white/20 px-8 py-4 rounded-lg text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-white/20 transition-all flex items-center gap-3 shadow-xl"
+                  >
+                      View Weekly Diet Plan
+                      <Eye size={14} className="text-[#8ecb84]" />
+                  </motion.button>
+                </div>
            </div>
         </motion.div>
 
-        {/* Tracking Grid */}
+        {/* Daily Diet Tracking Section */}
         <motion.div 
           variants={itemVariants}
           className="flex-1 bg-white rounded-xl p-10 border border-[#ddd8ce] shadow-sm flex flex-col overflow-hidden"
         >
           <header className="flex justify-between items-end mb-8">
             <div>
-              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966] mb-2 block">Progression Log</span>
-              <h4 className="font-serif text-3xl italic text-[#1c3a1c]">Active Protocols</h4>
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966] mb-2 block">{today} Protocol</span>
+              <h4 className="font-serif text-3xl italic text-[#1c3a1c]">Daily Intake Tracking</h4>
             </div>
-            <button className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#2d5a27] hover:text-[#1c3a1c] transition-all border-b border-[#2d5a27]/30 pb-1">
-                Full History
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1">Daily Completion</p>
+                <p className="text-sm font-bold text-[#2d5a27]">{progressPercentage}%</p>
+              </div>
+              <div className="w-32 bg-[#f5faf4] h-2 rounded-full overflow-hidden border border-[#ddd8ce]">
+                 <motion.div 
+                    initial={{ width: 0 }} 
+                    animate={{ width: `${progressPercentage}%` }}
+                    className="h-full bg-[#8ecb84]"
+                 />
+              </div>
+            </div>
           </header>
           
-          <div className="grid grid-cols-2 gap-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-            <ProgressCard 
-              week="Week 01" 
-              title="Metabolic Priming" 
-              img="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=500" 
-              active={false}
-            />
-            <ProgressCard 
-              week="Week 02" 
-              title="Phytonutrient Integration" 
-              img="https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&q=80&w=500" 
-              active={true}
-            />
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+            {loadingDiet ? (
+                <div className="h-full flex flex-col items-center justify-center opacity-40">
+                    <Loader2 className="animate-spin mb-4" />
+                    <p className="text-xs uppercase font-bold tracking-widest">Synchronizing Plan...</p>
+                </div>
+            ) : dailyDiet ? (
+                <div className="grid grid-cols-3 gap-6">
+                    {['breakfast', 'lunch', 'dinner'].map((meal) => (
+                        <div key={meal} className={`p-6 rounded-2xl border-2 transition-all duration-500 flex flex-col ${completedMeals[meal] ? 'border-[#8ecb84] bg-[#fbfdfa]' : 'border-[#f5faf4] bg-[#fdfdfc]'}`}>
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="p-3 bg-white rounded-xl border shadow-sm text-[#2d5a27]">
+                                    <Utensils size={18} />
+                                </div>
+                                <button onClick={() => toggleMeal(meal)} className="transition-transform active:scale-90">
+                                    {completedMeals[meal] ? (
+                                        <CheckCircle2 size={24} className="text-[#2d5a27]" />
+                                    ) : (
+                                        <Circle size={24} className="text-gray-200" />
+                                    )}
+                                </button>
+                            </div>
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#6a9966] mb-2">{meal}</span>
+                            <div className="flex-1 space-y-3">
+                                {dailyDiet[meal].map((item, idx) => (
+                                    <div key={idx} className="flex flex-col">
+                                        <p className="text-xs font-bold text-[#1c3a1c] truncate">{item.name}</p>
+                                        <p className="text-[10px] text-gray-400">{item.calories} kcal</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-[#fbfdfa] rounded-2xl border-2 border-dashed">
+                    <p className="font-serif text-xl italic mb-4">No diet plan active for today.</p>
+                    <button onClick={() => handleNav('/generate-weekly')} className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#2d5a27] hover:underline transition-all">Generate your first plan →</button>
+                </div>
+            )}
           </div>
         </motion.div>
       </motion.main>
@@ -198,23 +285,4 @@ const Dashboard = () => {
   );
 };
 
-const ProgressCard = ({ week, title, img, active }) => (
-  <motion.div 
-    variants={itemVariants}
-    whileHover={{ y: -8, transition: { duration: 0.3 } }}
-    className={`relative h-64 rounded-xl overflow-hidden border transition-all duration-500 group cursor-pointer flex flex-col justify-end p-8 ${active ? 'border-[#2d5a27] shadow-lg' : 'border-[#ddd8ce] opacity-80 hover:opacity-100'}`}
-  >
-    <img src={img} className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" alt={title} />
-    <div className="absolute inset-0 bg-gradient-to-t from-[#1c3a1c] via-[#1c3a1c]/20 to-transparent"></div>
-    
-    <div className="relative z-10">
-      <div className="flex items-center gap-3 mb-2">
-        <span className="text-[8px] font-black tracking-[0.4em] uppercase text-[#8ecb84]">{week}</span>
-        {active && <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2 }} className="h-1.5 w-1.5 bg-[#8ecb84] rounded-full" />}
-      </div>
-      <h4 className="font-serif text-xl italic text-white tracking-wide">{title}</h4>
-    </div>
-  </motion.div>
-);
-
-export default Dashboard;
+export default Dashboard;

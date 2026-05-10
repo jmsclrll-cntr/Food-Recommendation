@@ -4,6 +4,7 @@ import Signup from './pages/signup';
 import Dashboard from './pages/dashboard';
 import GenerateWeekly from './pages/generateWeekly.jsx';
 import Profile from './pages/Profile.jsx';
+import ViewWeekly from './pages/viewWeekly.jsx';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/generate-weekly" element={<GenerateWeekly />} />
         <Route path="/Profile" element={<Profile />} />
+        <Route path="/view-weekly" element={<ViewWeekly />} />
       </Routes>
     </Router>
   );

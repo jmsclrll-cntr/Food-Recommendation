@@ -1,22 +1,15 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CheckCircle, 
-  Loader2, 
-  Save, 
-  ArrowLeft, 
-  Info, 
-  RefreshCw, 
-  X, 
-  Eye 
+  CheckCircle, Loader2, Save, ArrowLeft, Info, RefreshCw, X, Eye, AlertCircle, Trash2 
 } from 'lucide-react';
 
 const GenerateWeekly = () => {
   const navigate = useNavigate();
 
-  // --- 1. CORE STATE MANAGEMENT ---
+  // --- 1. CORE STATE MANAGEMENT (YOUR ORIGINAL STATES) ---
   const [user] = useState(() => {
     const stored = localStorage.getItem('user');
     return stored ? JSON.parse(stored) : null;
@@ -26,17 +19,23 @@ const GenerateWeekly = () => {
   const [isSyncing, setIsSyncing] = useState(false); 
   const [isSubmitted, setIsSubmitted] = useState(false); 
   const [showToast, setShowToast] = useState(false);
+  const [errorNotif, setErrorNotif] = useState("");
+
   
   const [activeDayIdx, setActiveDayIdx] = useState(0); 
   const [bmiStatus, setBmiStatus] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [weeklyPlan, setWeeklyPlan] = useState(null);
+  const [dailyTarget, setDailyTarget] = useState(0);
 
-  // --- 2. INTERACTION STATES (Modals & Selection) ---
-  const [swappingMeal, setSwappingMeal] = useState(null); // Stores { type: 'breakfast' | 'lunch' | 'dinner' }
-  const [viewingDetails, setViewingDetails] = useState(null); // Stores the full meal object for the detail modal
+  // Interaction States
+  const [swappingMeal, setSwappingMeal] = useState(null); 
+  const [dbAlternatives, setDbAlternatives] = useState([]);
+  const [viewingDetails, setViewingDetails] = useState(null);
+  const [hoveredFood, setHoveredFood] = useState(null);
+  const hoverTimerRef = useRef(null);
 
-  // Form Data (Connected to your Database Schema)
+  // YOUR ORIGINAL FORM DATA
   const [formData, setFormData] = useState({
     gender: 'male', 
     height: '', 
@@ -48,17 +47,19 @@ const GenerateWeekly = () => {
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-  // Static alternatives list (Used when user clicks 'Add New' or 'Pick Alternative')
-  const alternativesList = [
-    { name: "Avocado & Egg Sourdough", calories: 340, protein: 12, grams: 250, sodium: 400, sugar: 4, saturatedFat: 3, type: "Breakfast", imageUrl: "https://images.unsplash.com/photo-1525351484163-7529414344d8?q=80&w=400" },
-    { name: "Blueberry Protein Oatmeal", calories: 290, protein: 20, grams: 300, sodium: 150, sugar: 8, saturatedFat: 1, type: "Breakfast", imageUrl: "https://images.unsplash.com/photo-1517673132405-a56a62b18caf?q=80&w=400" },
-    { name: "Grilled Salmon Salad", calories: 480, protein: 35, grams: 400, sodium: 600, sugar: 2, saturatedFat: 4, type: "Lunch", imageUrl: "https://images.unsplash.com/photo-1467003909585-2f8a72700288?q=80&w=400" },
-    { name: "Quinoa Veggie Stir-fry", calories: 410, protein: 15, grams: 350, sodium: 550, sugar: 5, saturatedFat: 1, type: "Dinner", imageUrl: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?q=80&w=400" }
-  ];
+  // Validate daily calories against target whenever plan changes
+  useEffect(() => {
+    if (!weeklyPlan || !dailyTarget) return;
+    const dayName = days[activeDayIdx];
+    const currentTotal = weeklyPlan[dayName]?.dailyTotal ?? 0;
+    if (Math.abs(currentTotal - dailyTarget) > 50) {
+      setErrorNotif(`Calories (${currentTotal}) differ from target (${dailyTarget}) by >50 kcal. Adjust meals.`);
+    } else {
+      setErrorNotif('');
+    }
+  }, [weeklyPlan, dailyTarget, activeDayIdx, days]);
 
-  // --- 3. BUSINESS LOGIC ---
-
-  // BMI Calculation (Real-time sync)
+  // YOUR ORIGINAL BMI LOGIC
   const bmi = useMemo(() => {
     if (formData.height > 0 && formData.weight > 0) {
       const h = formData.height / 100;
@@ -67,13 +68,12 @@ const GenerateWeekly = () => {
     return 0;
   }, [formData.height, formData.weight]);
 
-  // Auth Protection
   useEffect(() => {
     if (!user) { navigate('/'); return; }
     setLoading(false); 
   }, [navigate, user]);
 
-  // AI Suggestion Sync (Preserved from original code)
+  // YOUR ORIGINAL AI SUGGESTION SYNC
   useEffect(() => {
     if (bmi > 0 && formData.gender) {
       axios.get(`http://localhost:5000/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmi}`)
@@ -85,39 +85,26 @@ const GenerateWeekly = () => {
     }
   }, [bmi, formData.gender]);
 
-  // Submit Handler (POST/PUT + Plan Generation)
+  // FETCH DB ALTERNATIVES
+  useEffect(() => {
+    if (swappingMeal) {
+        axios.get(`http://localhost:5000/api/recommendations/alternatives?type=${swappingMeal.type}&condition=${formData.condition}`)
+            .then(res => setDbAlternatives(res.data))
+            .catch(() => alert("Database fetch error: 404 Route Not Found. Ensure recommendationRoutes.js is updated."));
+    }
+  }, [swappingMeal, formData.condition]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.height || !formData.weight) {
-        alert("Please provide height and weight.");
-        return;
-    }
+    if (!formData.height || !formData.weight) return;
     setIsSyncing(true);
-    const payload = {
-        userId: user.uid || user.id,
-        gender: formData.gender,
-        height: parseFloat(formData.height),
-        weight: parseFloat(formData.weight),
-        age: parseFloat(formData.age || 25),
-        goal: formData.goal,
-        condition: formData.condition,
-        bmi: parseFloat(bmi)
-    };
     try {
-      if (!isSubmitted) {
-        await axios.post('http://localhost:5000/api/health/save', payload);
-      } else {
-        await axios.put(`http://localhost:5000/api/health/update/${user.uid || user.id}`, payload);
-      }
-      const planRes = await axios.post('http://localhost:5000/api/recommendations/generate-plan', payload);
+      const planRes = await axios.post('http://localhost:5000/api/recommendations/generate-plan', formData);
       if (planRes.data && planRes.data.plan) {
         setWeeklyPlan(planRes.data.plan);
-        setTimeout(() => {
-          setIsSyncing(false);
-          setIsSubmitted(true);
-          setShowToast(true);
-          setTimeout(() => setShowToast(false), 3000); 
-        }, 1200);
+        setDailyTarget(planRes.data.dailyTarget);
+        setIsSyncing(false);
+        setIsSubmitted(true);
       }
     } catch (err) {
       setIsSyncing(false);
@@ -125,46 +112,115 @@ const GenerateWeekly = () => {
     }
   };
 
-  // Swap Meal logic
-  const swapMeal = (newMeal) => {
-    const updatedPlan = { ...weeklyPlan };
-    updatedPlan[days[activeDayIdx]][swappingMeal.type] = newMeal;
+  const addMeal = (newMeal) => {
+    const dayName = days[activeDayIdx];
+    const updatedPlan = JSON.parse(JSON.stringify(weeklyPlan));
+    
+    // If index is present, it's a swap (replace), otherwise it's an add (push)
+    if (swappingMeal.index !== undefined) {
+      updatedPlan[dayName][swappingMeal.type][swappingMeal.index] = newMeal;
+    } else {
+      updatedPlan[dayName][swappingMeal.type].push(newMeal);
+    }
+
+    const dayData = updatedPlan[dayName];
+    const newTotal = [...dayData.breakfast, ...dayData.lunch, ...dayData.dinner].reduce((sum, item) => sum + (item.calories || 0), 0);
+    updatedPlan[dayName].dailyTotal = Math.round(newTotal);
     setWeeklyPlan(updatedPlan);
     setSwappingMeal(null);
+    setHoveredFood(null);
   };
 
-  const handleSaveToProfile = () => {
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 2000);
+  const removeMeal = (mealType, idx) => {
+    const dayName = days[activeDayIdx];
+    const updatedPlan = JSON.parse(JSON.stringify(weeklyPlan));
+    if (updatedPlan[dayName][mealType].length <= 1) return; // keep at least 1
+    updatedPlan[dayName][mealType].splice(idx, 1);
+    const dayData = updatedPlan[dayName];
+    const newTotal = [...dayData.breakfast, ...dayData.lunch, ...dayData.dinner].reduce((sum, item) => sum + (item.calories || 0), 0);
+    updatedPlan[dayName].dailyTotal = Math.round(newTotal);
+    setWeeklyPlan(updatedPlan);
   };
 
-  if (loading) return (
-    <div className="h-screen flex items-center justify-center bg-[#f5faf4]">
-      <Loader2 className="w-8 h-8 animate-spin text-[#6a9966]" />
-    </div>
-  );
+  const handleHoverStart = (food) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setHoveredFood(food), 2000);
+  };
+  const handleHoverEnd = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setHoveredFood(null);
+  };
+
+  const handleSaveToProfile = async () => {
+    if (!user) return;
+    const currentTotal = weeklyPlan[days[activeDayIdx]].dailyTotal;
+    if (weeklyPlan[days[activeDayIdx]].dailyTotal > dailyTarget || (dailyTarget - weeklyPlan[days[activeDayIdx]].dailyTotal) > 50) {
+        setErrorNotif(`Condition failed: Current calories (${currentTotal}) differ from target (${dailyTarget}) by >50 kcal. Adjust meals.`);
+        setTimeout(() => setErrorNotif(""), 5000);
+        return;
+    }
+
+    try {
+      setIsSyncing(true);
+      await axios.post('http://localhost:5000/api/diets/save-weekly', {
+        userId: user.id || user.uid || user._id,
+        plan: weeklyPlan
+      });
+      setShowToast(true);
+      setTimeout(() => {
+        setShowToast(false);
+        navigate('/dashboard');
+      }, 2500);
+    } catch (err) {
+      console.error("Save Error:", err);
+      alert("Failed to save plan. Check console for details.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-[#f5faf4]"><Loader2 className="animate-spin text-[#6a9966]" /></div>;
 
   return (
-    <div className="h-screen w-full bg-[#f5faf4] text-[#1c3a1c] font-sans antialiased p-10 overflow-hidden relative">
+    <div className="h-screen w-full bg-[#f5faf4] text-[#1c3a1c] p-10 overflow-hidden relative">
       
-      {/* SYNCING / LOADING OVERLAY */}
+      {/* ERROR NOTIFICATION */}
       <AnimatePresence>
-        {isSyncing && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-[#f5faf4]/70 backdrop-blur-md flex items-center justify-center"
-          >
-            <div className="text-center">
-                <Loader2 className="w-12 h-12 animate-spin text-[#2d5a27] mx-auto mb-4" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#2d5a27]">Processing Biometrics & Planning...</p>
-            </div>
-          </motion.div>
+        {errorNotif && (
+            <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }}
+                className="fixed top-10 left-1/2 -translate-x-1/2 z-[200] bg-red-600 text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-3"
+            >
+                <AlertCircle size={20} />
+                <span className="text-[10px] font-bold uppercase tracking-widest">{errorNotif}</span>
+            </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* SUCCESS NOTIFICATION */}
+      <AnimatePresence>
+        {showToast && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[300] flex items-center justify-center bg-[#1c3a1c]/60 backdrop-blur-sm"
+            >
+                <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white p-12 rounded-[40px] shadow-2xl text-center max-w-sm mx-4 border-4 border-[#8ecb84]">
+                    <div className="w-20 h-20 bg-[#f5faf4] rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                        <CheckCircle size={48} className="text-[#2d5a27]" />
+                    </div>
+                    <h2 className="font-serif text-3xl text-[#1c3a1c] mb-2">Plan Saved!</h2>
+                    <p className="text-sm text-[#5a7054] mb-8 uppercase tracking-widest font-bold">Synchronized to Profile</p>
+                    <div className="flex items-center justify-center gap-3 text-[#6a9966] text-[10px] font-black uppercase tracking-[0.2em]">
+                        <Loader2 className="animate-spin" size={14} />
+                        Returning to Hub...
+                    </div>
+                </motion.div>
+            </motion.div>
         )}
       </AnimatePresence>
 
-      <div className={`grid h-full transition-all duration-1000 ease-in-out ${isSubmitted ? 'grid-cols-12 gap-10' : 'grid-cols-1'}`}>
+      <div className={`grid h-full transition-all duration-1000 ${isSubmitted ? 'grid-cols-12 gap-10' : 'grid-cols-1'}`}>
         
-        {/* --- LEFT COLUMN: BIOMETRIC SIDEBAR (EXACT IMAGE UI) --- */}
-        <motion.div layout transition={{ type: "spring", stiffness: 60, damping: 15 }}
+        {/* --- LEFT COLUMN: YOUR ORIGINAL BIOMETRIC SIDEBAR --- */}
+        <motion.div layout transition={{ type: "spring", stiffness: 60 }}
           className={`${isSubmitted ? 'col-span-4' : 'max-w-xl mx-auto w-full'} flex flex-col h-full`}
         >
           <header className="flex items-center gap-6 mb-8 flex-shrink-0">
@@ -178,7 +234,6 @@ const GenerateWeekly = () => {
           </header>
 
           <div className="flex flex-col gap-6 flex-grow overflow-hidden pb-4">
-            {/* The Main Form Box */}
             <main className="bg-white rounded-2xl p-10 border border-[#ddd8ce] shadow-sm overflow-y-auto">
               <h3 className="font-serif text-3xl mb-12 tracking-tight italic">Biometric Input</h3>
               <form onSubmit={handleSubmit} className="space-y-12">
@@ -249,205 +304,118 @@ const GenerateWeekly = () => {
           </div>
         </motion.div>
 
-        {/* --- RIGHT COLUMN: WEEKLY GRID & MODALS --- */}
-        <AnimatePresence>
-          {isSubmitted && weeklyPlan && (
-            <motion.div initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
-              className="col-span-8 h-full pt-[104px]"
-            >
-              <div className="grid grid-cols-4 grid-rows-2 gap-4 h-[calc(100%-140px)]">
+        {/* --- RIGHT COLUMN: WEEKLY GRID & ACTIVE DAY PANEL --- */}
+        {isSubmitted && weeklyPlan && (
+          <motion.div initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} className="col-span-8 h-full pt-[104px]">
+            <div className="grid grid-cols-4 grid-rows-2 gap-4 h-[calc(100%-140px)]">
+              
+              <motion.div key={days[activeDayIdx]} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-1 row-span-2 bg-white rounded-2xl p-8 border-2 border-[#2d5a27] shadow-xl flex flex-col relative overflow-hidden h-full max-h-full">
                 
-                {/* 1. ACTIVE DAY DETAIL PANEL */}
-                <motion.div layout key={days[activeDayIdx]} className="col-span-1 row-span-2 bg-white rounded-2xl p-8 border-2 border-[#2d5a27] shadow-xl flex flex-col overflow-hidden relative">
-                  
-                  {/* --- NUTRITION INFO MODAL (DARK GREEN - THEMED) --- */}
-                  <AnimatePresence>
+                {/* DETAILS MODAL */}
+                <AnimatePresence>
                     {viewingDetails && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                            className="absolute inset-0 z-[70] bg-[#1c3a1c] text-white p-8 flex flex-col overflow-y-auto custom-scrollbar"
-                        >
-                            <div className="flex justify-between items-center mb-8">
-                                <h5 className="font-serif italic text-2xl text-[#e8f4e5]">Nutrition Info</h5>
-                                <button onClick={() => setViewingDetails(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={24} /></button>
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[70] bg-[#1c3a1c] text-white p-6 flex flex-col overflow-y-auto custom-scrollbar">
+                            <div className="flex justify-between items-center mb-4"><h5 className="font-serif italic text-xl">Nutrition Facts</h5><button onClick={() => setViewingDetails(null)} className="hover:text-[#8ecb84] transition-colors"><X size={20}/></button></div>
+                            {viewingDetails.image ? <img src={viewingDetails.image} alt={viewingDetails.name} className="w-full h-36 object-cover rounded-xl mb-4" /> : <div className="w-full h-36 rounded-xl mb-4 bg-gradient-to-br from-[#2d5a27] to-[#8ecb84] flex items-center justify-center"><span className="text-4xl">🍽️</span></div>}
+                            <h2 className="text-xl font-bold text-[#8ecb84] italic mb-4 leading-tight">{viewingDetails.name}</h2>
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div className="bg-white/10 p-4 rounded-xl text-center"><p className="text-[9px] uppercase tracking-widest text-[#8ecb84] mb-1">Calories</p><p className="text-base font-bold">{viewingDetails.calories} kcal</p></div>
+                                <div className="bg-white/10 p-4 rounded-xl text-center"><p className="text-[9px] uppercase tracking-widest text-[#8ecb84] mb-1">Serving</p><p className="text-base font-bold">{viewingDetails.grams}g</p></div>
+                                {viewingDetails.sugar !== undefined && <div className="bg-white/10 p-4 rounded-xl text-center"><p className="text-[9px] uppercase tracking-widest text-[#8ecb84] mb-1">Sugar</p><p className="text-base font-bold">{viewingDetails.sugar}g</p></div>}
+                                {viewingDetails.sodium !== undefined && <div className="bg-white/10 p-4 rounded-xl text-center"><p className="text-[9px] uppercase tracking-widest text-[#8ecb84] mb-1">Sodium</p><p className="text-base font-bold">{viewingDetails.sodium}mg</p></div>}
                             </div>
-
-                            {/* PICTURE DISPLAY AREA (WITH THEMED PLACEHOLDER) */}
-                            <div className="w-full h-44 rounded-2xl overflow-hidden mb-6 shadow-lg bg-black/20 border border-white/5 flex items-center justify-center">
-                                {viewingDetails.imageUrl ? (
-                                    <img src={viewingDetails.imageUrl} alt="Meal" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="flex flex-col items-center gap-2 opacity-20">
-                                        <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/30 flex items-center justify-center">
-                                            <Eye size={20} />
-                                        </div>
-                                        <span className="text-[9px] font-black uppercase tracking-[0.4em]">Visual Pending</span>
-                                    </div>
-                                )}
+                            <div className="mt-auto space-y-2">
+                                <button onClick={() => { setSwappingMeal({type: viewingDetails.slotType, index: viewingDetails.index}); setViewingDetails(null); }} className="w-full py-4 bg-[#8ecb84] text-[#1c3a1c] rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-[#a8dba0] transition-colors">Pick Alternative</button>
+                                <button onClick={() => { removeMeal(viewingDetails.slotType, viewingDetails.index); setViewingDetails(null); }} className="w-full py-3 bg-red-500/20 text-red-300 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-red-500/40 transition-colors flex items-center justify-center gap-2"><Trash2 size={14}/> Remove This Meal</button>
                             </div>
-
-                            {/* BIG FONT FOOD NAME & TYPE */}
-                            <div className="mb-10">
-                                <h2 className="text-4xl font-bold text-[#8ecb84] leading-tight font-sans italic">
-                                    {viewingDetails.name}
-                                </h2>
-                                <p className="text-[#6a9966] text-[10px] font-black uppercase tracking-[0.3em] mt-2">
-                                    TYPE: {viewingDetails.type || viewingDetails.slotType || "Main Dish"}
-                                </p>
-                            </div>
-
-                            {/* CALORIES & PROTEIN BOXES */}
-                            <div className="grid grid-cols-2 gap-4 mb-8">
-                                <div className="bg-white/5 border border-white/10 p-5 rounded-2xl text-center">
-                                    <p className="text-[10px] font-bold uppercase text-[#6a9966] mb-1 tracking-widest">Calories</p>
-                                    <p className="text-2xl font-bold">{viewingDetails.calories} <span className="text-sm font-normal opacity-50">kcal</span></p>
-                                </div>
-                                <div className="bg-white/5 border border-white/10 p-5 rounded-2xl text-center">
-                                    <p className="text-[10px] font-bold uppercase text-[#6a9966] mb-1 tracking-widest">Protein</p>
-                                    <p className="text-2xl font-bold">{viewingDetails.protein} <span className="text-sm font-normal opacity-50">g</span></p>
-                                </div>
-                            </div>
-
-                            {/* DATABASE CONTENTS BREAKDOWN */}
-                            <div className="space-y-4 border-t border-white/10 pt-8 mb-10">
-                                <div className="flex justify-between items-center px-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-widest opacity-40">Grams</span>
-                                    <span className="font-mono font-bold text-[#8ecb84]">{viewingDetails.grams || "0"}g</span>
-                                </div>
-                                <div className="flex justify-between items-center px-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-widest opacity-40">Sodium</span>
-                                    <span className="font-mono font-bold text-[#8ecb84]">{viewingDetails.sodium || "0"}mg</span>
-                                </div>
-                                <div className="flex justify-between items-center px-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-widest opacity-40">Sugar</span>
-                                    <span className="font-mono font-bold text-[#8ecb84]">{viewingDetails.sugar || "0"}g</span>
-                                </div>
-                                <div className="flex justify-between items-center px-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-widest opacity-40">Saturated Fat</span>
-                                    <span className="font-mono font-bold text-[#8ecb84]">{viewingDetails.saturatedFat || "0"}g</span>
-                                </div>
-                            </div>
-
-                            {/* THE TASK: PICK ALTERNATIVE BUTTON */}
-                            <button 
-                                onClick={() => {
-                                    setSwappingMeal({ type: viewingDetails.slotType });
-                                    setViewingDetails(null);
-                                }}
-                                className="w-full py-4 bg-[#8ecb84] text-[#1c3a1c] rounded-xl font-bold uppercase tracking-widest hover:bg-white hover:scale-[1.02] transition-all shadow-lg flex items-center justify-center gap-3 mt-auto"
-                            >
-                                <RefreshCw size={16} /> Pick Alternative
-                            </button>
                         </motion.div>
                     )}
-                  </AnimatePresence>
+                </AnimatePresence>
 
-                  {/* ALTERNATIVES LIST MODAL (Triggered by Swap) */}
-                  <AnimatePresence>
+                {/* ADD MODAL */}
+                <AnimatePresence>
                     {swappingMeal && (
-                      <motion.div initial={{ y: 200, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 200, opacity: 0 }} 
-                        className="absolute inset-0 z-[70] bg-white p-6 flex flex-col"
-                      >
-                        <div className="flex justify-between items-center mb-6">
-                            <h5 className="text-[10px] font-black uppercase text-[#2d5a27] tracking-widest">Swap {swappingMeal.type}</h5>
-                            <button onClick={() => setSwappingMeal(null)} className="p-1 hover:bg-[#f5faf4] rounded-full transition-colors"><X size={18}/></button>
-                        </div>
-                        <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar pr-2">
-                            {alternativesList.map((alt, i) => (
-                                <button key={i} onClick={() => swapMeal(alt)} 
-                                    className="w-full text-left p-4 rounded-xl border border-[#ddd8ce] hover:border-[#2d5a27] hover:bg-[#f5faf4] transition-all group"
-                                >
-                                    <p className="text-xs font-bold text-[#1c3a1c] mb-1 group-hover:text-[#2d5a27]">{alt.name}</p>
-                                    <p className="text-[10px] opacity-40">{alt.calories} kcal | {alt.protein}g Protein</p>
-                                </button>
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} className="absolute inset-0 z-[70] bg-white p-6 flex flex-col shadow-2xl">
+                            <div className="flex justify-between mb-4 font-bold text-xs tracking-widest text-[#2d5a27]"><span>FOOD SELECTION</span><button onClick={() => { setSwappingMeal(null); setHoveredFood(null); }}><X size={20}/></button></div>
+                            <p className="text-xs text-gray-400 mb-3 italic">Hover 2s to preview details</p>
+                            <div className="flex-1 space-y-2 overflow-y-auto pr-2 custom-scrollbar relative">
+                                {dbAlternatives.map((alt, i) => (
+                                    <button key={i} onClick={() => addMeal(alt)} onMouseEnter={() => handleHoverStart(alt)} onMouseLeave={handleHoverEnd} className="w-full text-left p-4 rounded-xl border hover:border-[#2d5a27] hover:bg-[#f5faf4] transition-all group relative">
+                                        <div className="flex items-center gap-3">
+                                            {alt.image ? <img src={alt.image} alt={alt.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#2d5a27] to-[#8ecb84] flex items-center justify-center flex-shrink-0"><span className="text-sm">🍽️</span></div>}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-bold text-[#1c3a1c] group-hover:text-[#2d5a27] truncate">{alt.name}</p>
+                                                <p className="text-xs opacity-40">{alt.calories} kcal · {alt.grams}g</p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                                {/* Hover Preview Tooltip */}
+                                <AnimatePresence>
+                                    {hoveredFood && (
+                                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-80 bg-[#1c3a1c] text-white rounded-2xl shadow-2xl p-6 border border-[#2d5a27]">
+                                            {hoveredFood.image ? <img src={hoveredFood.image} alt={hoveredFood.name} className="w-full h-40 object-cover rounded-xl mb-4" /> : <div className="w-full h-40 rounded-xl mb-4 bg-gradient-to-br from-[#2d5a27] to-[#8ecb84] flex items-center justify-center"><span className="text-5xl">🍽️</span></div>}
+                                            <h4 className="font-bold text-[#8ecb84] text-base mb-3">{hoveredFood.name}</h4>
+                                            <div className="grid grid-cols-2 gap-2 text-center">
+                                                <div className="bg-white/10 p-3 rounded-lg"><p className="text-[9px] uppercase text-[#8ecb84]">Calories</p><p className="text-sm font-bold">{hoveredFood.calories} kcal</p></div>
+                                                <div className="bg-white/10 p-3 rounded-lg"><p className="text-[9px] uppercase text-[#8ecb84]">Serving</p><p className="text-sm font-bold">{hoveredFood.grams}g</p></div>
+                                                {hoveredFood.sugar !== undefined && <div className="bg-white/10 p-3 rounded-lg"><p className="text-[9px] uppercase text-[#8ecb84]">Sugar</p><p className="text-sm font-bold">{hoveredFood.sugar}g</p></div>}
+                                                {hoveredFood.sodium !== undefined && <div className="bg-white/10 p-3 rounded-lg"><p className="text-[9px] uppercase text-[#8ecb84]">Sodium</p><p className="text-sm font-bold">{hoveredFood.sodium}mg</p></div>}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <span className="text-xs font-black text-[#2d5a27] uppercase tracking-[0.3em] mb-4">{days[activeDayIdx]} Plan</span>
+                <div className="flex-1 flex flex-col gap-3 min-h-0 overflow-hidden">
+                  {['breakfast', 'lunch', 'dinner'].map((m) => (
+                    <div key={m} className="flex-1 min-h-0 bg-[#fbfdfa] rounded-xl border-2 p-4 flex flex-col group hover:border-[#2d5a27] transition-all">
+                        <p className="text-[10px] font-bold uppercase text-[#6a9966] mb-2">{m}</p>
+                        <div className="flex-1 overflow-y-auto space-y-1.5 mb-2 custom-scrollbar">
+                            {weeklyPlan[days[activeDayIdx]][m].map((item, idx) => (
+                                <div key={idx} className="flex justify-between items-center bg-white p-2.5 rounded-lg border text-xs font-bold text-[#1c3a1c]">
+                                    <span className="truncate flex-1 mr-2">{item.name}</span>
+                                    <span className="text-[10px] text-gray-400 mr-2 flex-shrink-0">{item.calories} kcal</span>
+                                    <button onClick={() => setViewingDetails({...item, slotType: m, index: idx})} className="hover:text-[#2d5a27] transition-colors flex-shrink-0" title="View details"><Eye size={16}/></button>
+                                </div>
                             ))}
                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                        <button onClick={() => setSwappingMeal({type: m})} className="w-full py-2.5 bg-[#f5faf4] border text-[#2d5a27] rounded-lg text-[10px] font-bold uppercase hover:bg-[#2d5a27] hover:text-white transition-all">+ Add Food</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-4 mt-6 border-t text-center flex-shrink-0">
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Goal: {dailyTarget} kcal</p>
+                    <p className={`text-xl font-serif italic ${(weeklyPlan[days[activeDayIdx]].dailyTotal > dailyTarget || (dailyTarget - weeklyPlan[days[activeDayIdx]].dailyTotal) > 50) ? 'text-red-500' : 'text-[#2d5a27]'}`}>
+                        {weeklyPlan[days[activeDayIdx]].dailyTotal} <span className="text-[10px] font-sans not-italic font-bold">kcal</span>
+                    </p>
+                </div>
+              </motion.div>
 
-                  {/* Main Day Display Contents */}
-                  <span className="text-[9px] font-black text-[#2d5a27] uppercase tracking-[0.3em] mb-4">{days[activeDayIdx]} Plan</span>
-                  <h4 className="font-serif italic text-3xl mb-8 text-[#1c3a1c]">Daily Nutrients</h4>
-                  
-                  <div className="flex-1 flex flex-col gap-4 min-h-0">
-                    {['breakfast', 'lunch', 'dinner'].map((mealType) => {
-                      const meal = weeklyPlan[days[activeDayIdx]][mealType];
-                      return (
-                        <div key={mealType} className="flex-1 flex flex-col min-h-0">
-                          <p className="text-[9px] font-bold uppercase text-[#6a9966] mb-1">{mealType}</p>
-                          <div className="flex-1 min-h-0 bg-[#fbfdfa] rounded-xl border-2 border-[#f0f4ef] p-4 flex flex-col justify-between group hover:border-[#2d5a27] transition-all relative">
-                            <h5 className="font-bold text-[13px] text-[#1c3a1c] line-clamp-2">{meal?.name || "Calculation in Progress"}</h5>
-                            
-                            {/* MEAL CARD BUTTONS */}
-                            <div className="flex gap-2 mt-3">
-                                <button 
-                                    onClick={() => setViewingDetails({ ...meal, slotType: mealType })}
-                                    className="flex-1 py-2 border border-[#ddd8ce] rounded-lg text-[8px] font-bold uppercase tracking-widest hover:bg-[#1c3a1c] hover:text-white transition-all flex items-center justify-center gap-1"
-                                >
-                                    <Eye size={10} /> Details
-                                </button>
-                                <button 
-                                    onClick={() => setSwappingMeal({ type: mealType })}
-                                    className="flex-1 py-2 bg-[#f5faf4] border border-[#ddd8ce] text-[#2d5a27] rounded-lg text-[8px] font-bold uppercase tracking-widest hover:bg-[#2d5a27] hover:text-white transition-all flex items-center justify-center gap-1"
-                                >
-                                    <RefreshCw size={10} /> Add New
-                                </button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  
-                  <div className="pt-4 mt-auto border-t border-[#f0f4ef] text-center">
-                    <p className="text-[9px] font-bold text-[#5a7054] uppercase tracking-widest">Daily Energy: {weeklyPlan[days[activeDayIdx]].dailyTotal} kcal</p>
-                  </div>
-                </motion.div>
-
-                {/* 2. DAY MINI CARDS (Interaction Locked when Modal Active) */}
-                {days.map((day, idx) => {
-                  if (idx === activeDayIdx) return null; 
-                  return (
-                    <motion.div 
-                      key={day} 
-                      onClick={() => !viewingDetails && !swappingMeal && setActiveDayIdx(idx)}
-                      whileHover={viewingDetails || swappingMeal ? {} : { scale: 1.05, y: -5, borderColor: '#2d5a27', boxShadow: "0 15px 30px -10px rgba(0,0,0,0.05)" }}
-                      className={`bg-white rounded-2xl p-6 border border-[#ddd8ce] shadow-sm flex flex-col justify-center transition-all group relative overflow-hidden ${viewingDetails || swappingMeal ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      <div className="absolute top-0 left-0 w-1 h-full bg-[#f5faf4] group-hover:bg-[#2d5a27] transition-all" />
-                      <span className="text-[8px] font-black text-[#6a9966] uppercase tracking-[0.2em] mb-2">Day 0{idx + 1}</span>
-                      <h4 className="font-serif italic text-xl text-[#1c3a1c] mb-1 group-hover:translate-x-1 transition-transform">{day}</h4>
-                      <p className="text-[9px] opacity-40 font-bold uppercase tracking-tighter">{weeklyPlan[day]?.dailyTotal} kcal</p>
-                    </motion.div>
-                  )
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              {days.map((day, idx) => idx !== activeDayIdx && (
+                <div key={day} onClick={() => setActiveDayIdx(idx)} className="h-full bg-white rounded-2xl p-6 border border-[#ddd8ce] shadow-sm flex flex-col justify-center cursor-pointer hover:border-[#2d5a27] transition-all group">
+                    <span className="text-[8px] font-black text-[#6a9966] uppercase mb-2">Day 0{idx+1}</span>
+                    <h4 className="font-serif italic text-xl">{day}</h4>
+                    <p className="text-[9px] opacity-40 font-bold uppercase mt-1">{weeklyPlan[day]?.dailyTotal} kcal</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
       </div>
 
-      {/* 4. CONFIRM & SAVE PLAN (FAB) */}
-      <AnimatePresence>
-        {isSubmitted && !viewingDetails && (
-            <motion.button
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                onClick={handleSaveToProfile}
-                className="fixed bottom-10 right-10 z-[60] bg-[#1c3a1c] text-white px-8 py-5 rounded-full shadow-2xl flex items-center gap-4 hover:bg-[#2d5a27] hover:scale-105 transition-all group"
-            >
-                <Save className="w-5 h-5 text-[#8ecb84]" />
-                <span className="text-[11px] font-black uppercase tracking-[0.2em]">Confirm & Save Plan</span>
-            </motion.button>
-        )}
-      </AnimatePresence>
+      {isSubmitted && (
+        <button onClick={handleSaveToProfile} className="fixed bottom-10 right-10 bg-[#1c3a1c] text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-4 hover:scale-105 transition-all">
+            <Save size={20} className="text-[#8ecb84]" />
+            <span className="text-[11px] font-black uppercase tracking-[0.2em]">Confirm & Save Plan</span>
+        </button>
+      )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6a9966; }
-      `}} />
+      <style dangerouslySetInnerHTML={{ __html: `.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #6a9966; border-radius: 10px; }` }} />
     </div>
   );
 };

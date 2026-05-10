@@ -5,6 +5,7 @@ const admin = require('firebase-admin'); // ADDED: Required for database connect
 const authRoutes = require('./routes/authRoutes');
 const recommendationRoutes = require('./routes/recommendationRoutes'); 
 const healthRoutes = require('./routes/healthRoutes'); 
+const dietRoutes = require('./routes/dietRoutes'); 
 const { syncMLData } = require('./ml/mlDataService');
 
 
@@ -40,6 +41,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/diets', dietRoutes);
 
 
 // --- ERROR HANDLING ---
@@ -81,5 +83,6 @@ app.listen(PORT, async () => {
     console.log(`✅ Auth routes: http://localhost:${PORT}/api/auth`);
     console.log(`✅ Recommendation routes: http://localhost:${PORT}/api/recommendations`);
     console.log(`✅ Health routes: http://localhost:${PORT}/api/health`);
+    console.log(`✅ Diet routes: http://localhost:${PORT}/api/diets`);
     console.log(`-----------------------------------------`);
 });

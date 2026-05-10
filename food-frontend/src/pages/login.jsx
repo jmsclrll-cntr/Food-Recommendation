@@ -4,6 +4,7 @@ import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 import { useNavigate, Link } from 'react-router-dom';
 
 const EMOJIS = [
