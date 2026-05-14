@@ -3,9 +3,37 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ArrowLeft, Calendar, Utensils, Zap, Loader2, Info, 
-    ChevronRight, ChevronLeft, Sun, Moon 
+    ChevronRight, ChevronLeft, Sun, Moon, CheckCircle2
 } from 'lucide-react';
 import axios from 'axios';
+
+const MissionCompleteSticker = () => (
+    <motion.div
+        initial={{ scale: 2, opacity: 0, rotate: -45 }}
+        animate={{ scale: 1, opacity: 1, rotate: -12 }}
+        transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+        className="pointer-events-none z-20 flex-shrink-0"
+    >
+        <div className="relative flex items-center justify-center opacity-80">
+            {/* Outer Grunge Circle */}
+            <div className="w-20 h-20 border-4 border-red-600/60 rounded-full flex items-center justify-center p-1 border-dashed">
+                <div className="w-full h-full border-2 border-red-600/40 rounded-full flex items-center justify-center">
+                    <div className="border-2 border-red-700/70 px-3 py-1.5 transform rotate-2">
+                        <div className="flex flex-col items-center">
+                            <span className="text-[7px] font-black text-red-700/80 uppercase tracking-tighter leading-none mb-0.5">MISSION</span>
+                            <div className="h-[1.5px] w-full bg-red-700/60 mb-0.5"></div>
+                            <span className="text-[12px] font-black text-red-700 uppercase leading-none tracking-tight">COMPLETE</span>
+                            <div className="h-[1.5px] w-full bg-red-700/60 mt-0.5"></div>
+                            <div className="flex gap-0.5 mt-0.5">
+                                {[1,2,3].map(i => <span key={i} className="text-[7px] text-red-700/80">★</span>)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </motion.div>
+);
 
 const ViewWeekly = () => {
     const navigate = useNavigate();
@@ -65,6 +93,37 @@ const ViewWeekly = () => {
     const activeDay = days[activeDayIdx];
     const currentDayPlan = weeklyPlan[activeDay];
 
+    const isDayComplete = (dayName) => {
+        if (!weeklyPlan || !weeklyPlan[dayName]) return false;
+        
+        const storedUser = localStorage.getItem('user');
+        if (!storedUser) return false;
+        const user = JSON.parse(storedUser);
+        const userId = user.id || user.uid || user._id;
+        
+        const progress = localStorage.getItem(`progress_${dayName}_${userId}`);
+        if (!progress) return false;
+        
+        const completedItems = JSON.parse(progress);
+        const dayPlan = weeklyPlan[dayName];
+        
+        const mealCategories = ['breakfast', 'lunch', 'dinner'];
+        let totalItems = 0;
+        let completedCount = 0;
+
+        mealCategories.forEach(meal => {
+            const items = dayPlan[meal] || [];
+            totalItems += items.length;
+            items.forEach((_, idx) => {
+                if (completedItems[`${meal}-${idx}`]) {
+                    completedCount++;
+                }
+            });
+        });
+        
+        return totalItems > 0 && completedCount >= totalItems;
+    };
+
     return (
         <div className={`h-screen w-full ${bgMain} ${textMain} p-10 flex flex-col overflow-hidden transition-colors duration-500`}>
             
@@ -108,16 +167,19 @@ const ViewWeekly = () => {
                         <button 
                             key={day} 
                             onClick={() => setActiveDayIdx(idx)}
-                            className={`w-full p-6 rounded-2xl border-2 transition-all text-left flex items-center justify-between group 
+                            className={`w-full p-6 rounded-2xl border-2 transition-all text-left flex items-center justify-between group relative overflow-visible
                                 ${activeDayIdx === idx 
                                     ? 'border-[#2d5a27] bg-[#1c3a1c] text-white shadow-lg' 
                                     : `${border} ${cardBg} hover:border-[#2d5a27]`}`}
                         >
-                            <div>
+                            <div className="relative z-10">
                                 <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${activeDayIdx === idx ? 'text-[#8ecb84]' : 'text-[#6a9966]'}`}>Day 0{idx+1}</p>
                                 <p className={`font-serif text-xl italic ${activeDayIdx === idx ? 'text-white' : textMain}`}>{day}</p>
                             </div>
-                            <div className={`p-2 rounded-lg transition-colors ${activeDayIdx === idx ? 'bg-[#2d5a27]' : 'bg-black/5 text-[#2d5a27]'}`}>
+
+                            {isDayComplete(day) && <span className="absolute right-4 top-4 text-[#8ecb84]"><CheckCircle2 size={16} /></span>}
+
+                            <div className={`relative z-10 p-2 rounded-lg transition-colors ${activeDayIdx === idx ? 'bg-[#2d5a27]' : 'bg-black/5 text-[#2d5a27]'}`}>
                                 {activeDayIdx === idx ? <Zap size={14} /> : <ChevronRight size={14} />}
                             </div>
                         </button>
@@ -127,11 +189,18 @@ const ViewWeekly = () => {
                 {/* Day Details View */}
                 <div className={`${cardBg} col-span-9 rounded-[40px] border ${border} shadow-sm flex flex-col overflow-hidden relative transition-colors`}>
                     <div className={`p-10 border-b ${border} flex justify-between items-center ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 relative">
                             <div className="w-12 h-12 bg-[#2d5a27] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#2d5a27]/20">
                                 <Utensils size={24} />
                             </div>
-                            <h2 className="font-serif text-4xl italic">{activeDay}'s Schedule</h2>
+                            <h2 className="font-serif text-4xl italic flex items-center gap-4">
+                                {activeDay}'s Schedule
+                                {isDayComplete(activeDay) && (
+                                    <div className="scale-75 origin-left">
+                                        <MissionCompleteSticker />
+                                    </div>
+                                )}
+                            </h2>
                         </div>
                         <div className="flex gap-4">
                             <button onClick={() => setActiveDayIdx(prev => Math.max(0, prev - 1))} disabled={activeDayIdx === 0} className={`p-4 ${cardBg} border ${border} rounded-2xl hover:opacity-70 disabled:opacity-30`}><ChevronLeft size={20}/></button>

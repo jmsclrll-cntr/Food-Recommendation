@@ -12,8 +12,11 @@ import {
   Utensils,
   Eye,
   Moon,
-  Sun
+  Sun,
+  Trophy,
+  PartyPopper
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 
 // Animation Variants
@@ -44,16 +47,13 @@ const sidebarVariants = {
   }
 };
 
+
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [dailyDiet, setDailyDiet] = useState(null);
   const [loadingDiet, setLoadingDiet] = useState(true);
 
-  const [completedMeals, setCompletedMeals] = useState({
-    breakfast: false,
-    lunch: false,
-    dinner: false
-  });
+  const [completedItems, setCompletedItems] = useState({});
 
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
@@ -100,17 +100,20 @@ const Dashboard = () => {
     );
 
     if (savedProgress) {
-      setCompletedMeals(JSON.parse(savedProgress));
+      setCompletedItems(JSON.parse(savedProgress));
     }
   }, [navigate, today]);
 
-  const toggleMeal = (mealType) => {
+  const toggleItem = (mealType, index) => {
+    const itemKey = `${mealType}-${index}`;
+    if (completedItems[itemKey]) return;
+
     const nextState = {
-      ...completedMeals,
-      [mealType]: !completedMeals[mealType]
+      ...completedItems,
+      [itemKey]: true
     };
 
-    setCompletedMeals(nextState);
+    setCompletedItems(nextState);
 
     const userId = user.id || user.uid || user._id;
 
@@ -121,10 +124,30 @@ const Dashboard = () => {
   };
 
   const progressPercentage = useMemo(() => {
-    const completed = Object.values(completedMeals).filter(Boolean).length;
+    if (!dailyDiet) return 0;
+    
+    // Explicitly count items in valid meal categories
+    const mealCategories = ['breakfast', 'lunch', 'dinner'];
+    const totalItems = mealCategories.reduce((acc, meal) => {
+      return acc + (Array.isArray(dailyDiet[meal]) ? dailyDiet[meal].length : 0);
+    }, 0);
 
-    return Math.round((completed / 3) * 100);
-  }, [completedMeals]);
+    if (totalItems === 0) return 0;
+
+    // Count how many of these specific items are completed
+    let completedCount = 0;
+    mealCategories.forEach(meal => {
+      if (Array.isArray(dailyDiet[meal])) {
+        dailyDiet[meal].forEach((_, idx) => {
+          if (completedItems[`${meal}-${idx}`]) {
+            completedCount++;
+          }
+        });
+      }
+    });
+
+    return Math.round((completedCount / totalItems) * 100);
+  }, [completedItems, dailyDiet]);
 
   const handleNav = (path) => {
     navigate(path);
@@ -377,15 +400,19 @@ const Dashboard = () => {
           variants={itemVariants}
           className={`${cardBg} rounded-xl p-10 border ${border} shadow-sm flex flex-col overflow-hidden backdrop-blur-xl transition-all duration-500`}
         >
-          <header className="flex justify-between items-end mb-8">
-            <div>
-              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966] mb-2 block">
-                {today} Protocol
-              </span>
+          <header className="flex justify-between items-end mb-8 relative">
+            <div className="flex items-center gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966]">
+                    {today} Protocol
+                  </span>
+                </div>
 
-              <h4 className={`font-serif text-3xl italic ${textMain}`}>
-                Daily Intake Tracking
-              </h4>
+                <h4 className={`font-serif text-3xl italic ${textMain}`}>
+                  Daily Intake Tracking
+                </h4>
+              </div>
             </div>
 
             <div className="flex items-center gap-4">
@@ -421,7 +448,7 @@ const Dashboard = () => {
             </div>
           </header>
 
-          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+          <div className={`flex-1 ${progressPercentage === 100 ? 'overflow-hidden' : 'overflow-y-auto'} pr-2 custom-scrollbar`}>
             {loadingDiet ? (
               <div className="h-full flex flex-col items-center justify-center opacity-40">
                 <Loader2 className="animate-spin mb-4" />
@@ -431,80 +458,156 @@ const Dashboard = () => {
                 </p>
               </div>
             ) : dailyDiet ? (
-              <div className="grid grid-cols-3 gap-6">
-                {['breakfast', 'lunch', 'dinner'].map((meal) => (
-                  <div
-                    key={meal}
-                    className={`p-6 rounded-2xl border-2 transition-all duration-500 flex flex-col ${
-                      completedMeals[meal]
-                        ? darkMode
-                          ? 'border-[#8ecb84] bg-[#1a1a1a]'
-                          : 'border-[#8ecb84] bg-[#fbfdfa]'
-                        : darkMode
-                        ? 'border-white/10 bg-[#121212]'
-                        : 'border-[#f5faf4] bg-[#fdfdfc]'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-6">
-                      <div
-                        className={`p-3 rounded-xl border shadow-sm ${
-                          darkMode
-                            ? 'bg-white/5 border-white/10 text-[#8ecb84]'
-                            : 'bg-white text-[#2d5a27]'
-                        }`}
-                      >
-                        <Utensils size={18} />
+              <div className="relative">
+                <AnimatePresence mode="wait">
+                  {progressPercentage === 100 ? (
+                    <motion.div
+                      key="success"
+                      initial={{ x: 500, opacity: 0, scale: 0.9 }}
+                      animate={{ x: 0, opacity: 1, scale: 1 }}
+                      exit={{ x: -500, opacity: 0, scale: 0.9 }}
+                      transition={{ 
+                        type: 'spring', 
+                        damping: 25, 
+                        stiffness: 120,
+                        mass: 1
+                      }}
+                      className="flex flex-col items-center justify-center py-10 text-center h-full min-h-[400px]"
+                    >
+                      <div className="relative mb-8">
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.4, 0.2] }}
+                          transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                          className="absolute inset-0 bg-[#8ecb84]/30 rounded-full blur-3xl"
+                        />
+                        <div className="relative bg-[#2d5a27] p-8 rounded-full text-white shadow-2xl">
+                          <Trophy size={64} />
+                        </div>
+                        <motion.div
+                          animate={{ 
+                            rotate: [0, 10, -10, 0],
+                            scale: [1, 1.1, 1]
+                          }}
+                          transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                          className="absolute -top-4 -right-4 text-[#8ecb84] bg-black/20 p-2 rounded-full backdrop-blur-md"
+                        >
+                          <PartyPopper size={32} />
+                        </motion.div>
                       </div>
 
-                      <button
-                        onClick={() => toggleMeal(meal)}
-                        className="transition-transform active:scale-90"
+                      <motion.h3 
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className={`font-serif text-6xl italic mb-6 ${textMain} leading-tight`}
                       >
-                        {completedMeals[meal] ? (
-                          <CheckCircle2
-                            size={24}
-                            className="text-[#8ecb84]"
-                          />
-                        ) : (
-                          <Circle
-                            size={24}
-                            className={
-                              darkMode
-                                ? 'text-white/20'
-                                : 'text-gray-200'
-                            }
-                          />
-                        )}
-                      </button>
-                    </div>
+                        Daily Protocol <br /> Achieved
+                      </motion.h3>
+                      
+                      <motion.p 
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                        className={`text-base max-w-lg mx-auto mb-12 leading-relaxed opacity-80 ${textSub}`}
+                      >
+                        You have successfully completed every element of your nutrition plan for today. 
+                        Your dedication to organic wellness is paving the way for superior cellular repair.
+                      </motion.p>
 
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#6a9966] mb-2">
-                      {meal}
-                    </span>
+                      <motion.button
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.4 }}
+                        onClick={() => handleNav('/view-weekly')}
+                        className="bg-[#2d5a27] text-white px-12 py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.5em] shadow-2xl hover:bg-[#1c3a1c] hover:scale-105 active:scale-95 transition-all group"
+                      >
+                        Review Weekly Performance
+                        <ArrowRight size={14} className="inline-block ml-3 group-hover:translate-x-1 transition-transform" />
+                      </motion.button>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="tasks"
+                      initial={{ x: 0, opacity: 1 }}
+                      exit={{ x: -800, opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+                      className="grid grid-cols-3 gap-6"
+                    >
+                      {['breakfast', 'lunch', 'dinner'].map((meal) => (
+                        <div
+                          key={meal}
+                          className={`relative p-8 rounded-[32px] border-2 transition-all duration-700 flex flex-col overflow-hidden ${
+                            darkMode
+                              ? 'border-white/5 bg-[#121212]'
+                              : 'border-[#f5faf4] bg-[#fdfdfc]'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-8">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`p-3 rounded-2xl border shadow-sm ${
+                                  darkMode
+                                    ? 'bg-white/5 border-white/10 text-[#8ecb84]'
+                                    : 'bg-white text-[#2d5a27]'
+                                }`}
+                              >
+                                <Utensils size={18} />
+                              </div>
+                              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6a9966]">
+                                {meal}
+                              </span>
+                            </div>
+                          </div>
 
-                    <div className="flex-1 space-y-3">
-                      {dailyDiet[meal].map((item, idx) => (
-                        <div key={idx} className="flex flex-col">
-                          <p
-                            className={`text-xs font-bold truncate ${textMain}`}
-                          >
-                            {item.name}
-                          </p>
+                          <div className="flex-1 space-y-6">
+                            {dailyDiet[meal].map((item, idx) => {
+                              const itemKey = `${meal}-${idx}`;
+                              const isCompleted = completedItems[itemKey];
 
-                          <p
-                            className={`text-[10px] ${
-                              darkMode
-                                ? 'text-white/40'
-                                : 'text-gray-400'
-                            }`}
-                          >
-                            {item.calories} kcal
-                          </p>
+                              return (
+                                <div 
+                                  key={idx} 
+                                  className={`relative group p-4 rounded-2xl border transition-all duration-500 ${
+                                    isCompleted 
+                                      ? 'border-[#8ecb84]/30 bg-[#8ecb84]/5' 
+                                      : 'border-transparent hover:border-white/10'
+                                  }`}
+                                >
+                                  <div className={`flex justify-between items-center transition-all duration-500 ${isCompleted ? 'opacity-30 grayscale' : 'opacity-100'}`}>
+                                    <div className="flex-1 min-w-0 pr-4">
+                                      <p className={`text-sm font-bold truncate mb-1 ${textMain}`}>
+                                        {item.name}
+                                      </p>
+                                      <p className={`text-[10px] font-medium ${darkMode ? 'text-white/40' : 'text-gray-400'}`}>
+                                        {item.calories} kcal • {item.grams}g
+                                      </p>
+                                    </div>
+
+                                    <button
+                                      onClick={() => toggleItem(meal, idx)}
+                                      disabled={isCompleted}
+                                      className={`p-2 rounded-xl transition-all ${
+                                        isCompleted 
+                                          ? 'text-[#8ecb84] cursor-default' 
+                                          : 'text-gray-300 hover:text-[#8ecb84] hover:bg-[#8ecb84]/10 active:scale-90'
+                                      }`}
+                                    >
+                                      {isCompleted ? (
+                                        <CheckCircle2 size={24} />
+                                      ) : (
+                                        <Circle size={24} />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       ))}
-                    </div>
-                  </div>
-                ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             ) : (
               <div
