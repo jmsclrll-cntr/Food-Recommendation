@@ -37,6 +37,12 @@ const Profile = () => {
 
   useEffect(() => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+    // SYNC DARK MODE GLOBALLY
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }, [darkMode]);
 
   // Prevent crashing if user isn't found
