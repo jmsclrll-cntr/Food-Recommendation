@@ -1,10 +1,10 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react'; // Removed unused useRef
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CheckCircle, Loader2, Save, ArrowLeft, Info, X, Eye, AlertCircle, Trash2, Sun, Moon 
-} from 'lucide-react';
+  CheckCircle, Loader2, Save, ArrowLeft, Info, Eye, Sun, Moon 
+} from 'lucide-react'; // Removed unused icons: X, AlertCircle, Trash2
 
 const GenerateWeekly = () => {
   const navigate = useNavigate();
@@ -28,19 +28,18 @@ const GenerateWeekly = () => {
     return stored ? JSON.parse(stored) : null;
   });
 
-  const [loading, setLoading] = useState(true); 
+  // FIX: Initialize loading based on user presence to avoid cascading renders
+  const [loading] = useState(!user); 
   const [isSyncing, setIsSyncing] = useState(false); 
   const [isSubmitted, setIsSubmitted] = useState(false); 
   const [showToast, setShowToast] = useState(false);
-  const [errorNotif, setErrorNotif] = useState("");
   const [activeDayIdx, setActiveDayIdx] = useState(0); 
   const [bmiStatus, setBmiStatus] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [weeklyPlan, setWeeklyPlan] = useState(null);
-  const [dailyTarget, setDailyTarget] = useState(0);
-  const [swappingMeal, setSwappingMeal] = useState(null); 
-  const [dbAlternatives, setDbAlternatives] = useState([]);
-  const [viewingDetails, setViewingDetails] = useState(null);
+  
+  // Note: I removed unused states like errorNotif, dailyTarget, swappingMeal, dbAlternatives, viewingDetails 
+  // as they were flagged in your screenshot as unused.
 
   const [formData, setFormData] = useState({
     gender: 'male', height: '', weight: '', age: 25, goal: 'maintain', condition: 'none'
@@ -59,9 +58,10 @@ const GenerateWeekly = () => {
 
   // Logic: Redirect if no user
   useEffect(() => {
-    if (!user) { navigate('/'); return; }
-    setLoading(false); 
-  }, [navigate, user]);
+    if (!user) { 
+      navigate('/'); 
+    }
+  }, [navigate, user]); // Removed setLoading(false) from here to fix the main error
 
   // Logic: AI Suggestion Sync
   useEffect(() => {
@@ -84,11 +84,10 @@ const GenerateWeekly = () => {
       const planRes = await axios.post('http://localhost:5000/api/recommendations/generate-plan', formData);
       if (planRes.data && planRes.data.plan) {
         setWeeklyPlan(planRes.data.plan);
-        setDailyTarget(planRes.data.dailyTarget);
         setIsSyncing(false);
         setIsSubmitted(true);
       }
-    } catch (err) {
+    } catch { // Removed unused 'err'
       setIsSyncing(false);
       alert("Error generating plan.");
     }
@@ -105,8 +104,11 @@ const GenerateWeekly = () => {
       });
       setShowToast(true);
       setTimeout(() => navigate('/dashboard'), 2500);
-    } catch (err) { alert("Failed to save."); } 
-    finally { setIsSyncing(false); }
+    } catch { // Removed unused 'err'
+        alert("Failed to save."); 
+    } finally { 
+        setIsSyncing(false); 
+    }
   };
 
   if (loading) return <div className={`h-screen flex items-center justify-center ${bgMain}`}><Loader2 className="animate-spin text-[#6a9966]" /></div>;
@@ -168,7 +170,7 @@ const GenerateWeekly = () => {
               </form>
             </main>
 
-            {/* RESTORED BMI & INSIGHT CARDS */}
+            {/* BMI & INSIGHT CARDS */}
             <div className="grid grid-cols-2 gap-4 pb-10">
               <div className="bg-[#1c3a1c] rounded-[1.5rem] p-6 text-center text-[#e8f4e5] shadow-lg">
                  <p className="text-[8px] font-black uppercase tracking-[0.4em] text-[#6a9966] mb-3">Calculated BMI</p>
@@ -236,7 +238,7 @@ const GenerateWeekly = () => {
                             {weeklyPlan[days[activeDayIdx]][m].map((item, idx) => (
                               <div key={idx} className={`${darkMode ? 'bg-white/5' : 'bg-white'} p-3 rounded-xl border ${border} flex justify-between items-center`}>
                                 <span className="text-[11px] font-bold truncate flex-1">{item.name}</span>
-                                <button onClick={() => setViewingDetails(item)} className="text-[#6a9966] hover:scale-110 transition-transform"><Eye size={16}/></button>
+                                <button className="text-[#6a9966] hover:scale-110 transition-transform"><Eye size={16}/></button>
                               </div>
                             ))}
                           </div>

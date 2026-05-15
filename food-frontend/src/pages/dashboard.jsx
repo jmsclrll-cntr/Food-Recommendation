@@ -207,7 +207,7 @@ const Dashboard = () => {
               <User size={12} />
             </div>
           </div>
-          <span className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#6a9966] mb-1 text-center">Authenticated Member</span>
+          <span className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#6a9966] mb-1 text-center"></span>
           <h2 className={`font-serif text-xl italic mb-6 ${textMain}`}>{user.username}</h2>
           <div className={`pt-6 border-t w-full flex justify-around ${border}`}>
             <div className="text-center">
@@ -268,7 +268,7 @@ const Dashboard = () => {
         >
           <div className="absolute inset-0 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent"></div>
           <div className="relative z-10 h-full flex flex-col justify-center px-12">
-            <span className="text-[9px] font-bold tracking-[0.4em] uppercase text-[#8ecb84] mb-4 block">Curated Nutrition</span>
+            <span className="text-[9px] font-bold tracking-[0.4em] uppercase text-[#8ecb84] mb-4 block"></span>
             <h1 className="font-serif text-5xl italic text-white leading-[1.1] mb-8">Sophisticated <br /> organic wellness.</h1>
             <div className="flex gap-4">
               <motion.button
