@@ -14,7 +14,7 @@ import {
   Moon,
   Sun,
   Trophy,
-  PartyPopper // Now used in the JSX below
+  PartyPopper
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -57,8 +57,6 @@ const Dashboard = () => {
     []
   );
 
-  // FIXED: Initializing directly from localStorage to solve the "cascading render" error
-  // Removed 'setUser' because it is no longer used after this change
   const [user] = useState(() => {
     const data = localStorage.getItem('user');
     return data ? JSON.parse(data) : null;
@@ -158,6 +156,10 @@ const Dashboard = () => {
   const textMain = darkMode ? 'text-white' : 'text-[#1c3a1c]';
   const textSub = darkMode ? 'text-white/60' : 'text-[#5a7054]';
 
+  // Donut SVG constants
+  const radius = 22;
+  const circumference = 2 * Math.PI * radius;
+
   return (
     <motion.div
       variants={containerVariants}
@@ -207,7 +209,6 @@ const Dashboard = () => {
               <User size={12} />
             </div>
           </div>
-          <span className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#6a9966] mb-1 text-center"></span>
           <h2 className={`font-serif text-xl italic mb-6 ${textMain}`}>{user.username}</h2>
           <div className={`pt-6 border-t w-full flex justify-around ${border}`}>
             <div className="text-center">
@@ -216,15 +217,16 @@ const Dashboard = () => {
             </div>
             <div className="text-center">
               <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${textSub}`}>Streak</p>
-              <p className={`text-sm font-bold ${textMain}`}>14 Days</p>
+              <p className={`text-sm font-bold ${textMain}`}>7 Days</p>
             </div>
           </div>
         </motion.div>
 
+        {/* HYDRATION PANEL */}
         <motion.div
           variants={itemVariants}
           className={`rounded-xl p-8 shadow-lg flex-1 flex flex-col justify-between relative overflow-hidden group transition-all duration-500 ${
-            darkMode ? 'bg-[#121212] text-white border border-white/10' : 'bg-[#1c3a1c] text-[#e8f4e5]'
+            darkMode ? 'bg-[#0d1a0d] text-white border border-white/5' : 'bg-[#1c3a1c] text-[#e8f4e5]'
           }`}
         >
           <div className="relative z-10">
@@ -251,7 +253,7 @@ const Dashboard = () => {
           <button
             onClick={() => { localStorage.clear(); navigate('/'); }}
             className={`relative z-10 w-full py-4 rounded-lg text-[9px] font-bold uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-2 border ${
-              darkMode ? 'border-white/10 text-white/70 hover:bg-white/5 hover:text-white' : 'border-white/10 text-[#6a9966] hover:text-white hover:bg-white/5'
+              darkMode ? 'border-white/10 text-white/50 hover:bg-white/5 hover:text-white' : 'border-white/10 text-[#6a9966] hover:text-white hover:bg-white/5'
             }`}
           >
             <LogOut size={12} /> Sign Out
@@ -260,15 +262,28 @@ const Dashboard = () => {
       </motion.aside>
 
       <motion.main variants={containerVariants} className="flex-1 flex flex-col gap-8 h-full">
+        
+        {/* BANNER SECTION */}
         <motion.div
           variants={itemVariants}
           className={`h-[300px] relative rounded-xl overflow-hidden shadow-sm group border transition-all duration-500 ${
             darkMode ? 'border-white/10' : 'border-[#ddd8ce]'
           }`}
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent"></div>
+          <img 
+            src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=1200" 
+            alt="Organic Nutritious Bowl"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+
+          <div className={`absolute inset-0 transition-colors duration-500 ${
+            darkMode 
+              ? 'bg-gradient-to-r from-[#0d1a0d] via-[#0d1a0d]/90 to-transparent' 
+              : 'bg-gradient-to-r from-[#1c3a1c] via-[#1c3a1c]/70 to-transparent'
+          }`}></div>
+
           <div className="relative z-10 h-full flex flex-col justify-center px-12">
-            <span className="text-[9px] font-bold tracking-[0.4em] uppercase text-[#8ecb84] mb-4 block"></span>
+            <span className="text-[9px] font-bold tracking-[0.4em] uppercase text-[#8ecb84] mb-4 block">Personalized Nutrition</span>
             <h1 className="font-serif text-5xl italic text-white leading-[1.1] mb-8">Sophisticated <br /> organic wellness.</h1>
             <div className="flex gap-4">
               <motion.button
@@ -295,18 +310,45 @@ const Dashboard = () => {
           variants={itemVariants}
           className={`${cardBg} rounded-xl p-10 border ${border} shadow-sm flex flex-col overflow-hidden backdrop-blur-xl transition-all duration-500`}
         >
-          <header className="flex justify-between items-end mb-8 relative">
+          <header className="flex justify-between items-center mb-8 relative">
             <div>
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966]">{today} Protocol</span>
               <h4 className={`font-serif text-3xl italic ${textMain}`}>Daily Intake Tracking</h4>
             </div>
-            <div className="flex items-center gap-4">
+
+            {/* DONUT PROGRESS SECTION */}
+            <div className="flex items-center gap-6">
               <div className="text-right">
                 <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${textSub}`}>Daily Completion</p>
-                <p className={`text-sm font-bold ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>{progressPercentage}%</p>
               </div>
-              <div className={`w-32 h-2 rounded-full overflow-hidden border ${darkMode ? 'bg-white/5 border-white/10' : 'bg-[#f5faf4] border-[#ddd8ce]'}`}>
-                <motion.div initial={{ width: 0 }} animate={{ width: `${progressPercentage}%` }} className="h-full bg-[#8ecb84]" />
+              <div className="relative flex items-center justify-center">
+                <svg className="w-16 h-16 transform -rotate-90">
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r={radius}
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="transparent"
+                    className={darkMode ? 'text-white/5' : 'text-[#f5faf4]'}
+                  />
+                  <motion.circle
+                    cx="32"
+                    cy="32"
+                    r={radius}
+                    stroke="#8ecb84"
+                    strokeWidth="4"
+                    fill="transparent"
+                    strokeDasharray={circumference}
+                    initial={{ strokeDashoffset: circumference }}
+                    animate={{ strokeDashoffset: circumference - (circumference * progressPercentage) / 100 }}
+                    transition={{ duration: 1.5, ease: "easeOut" }}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className={`absolute text-[11px] font-black ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>
+                  {progressPercentage}%
+                </span>
               </div>
             </div>
           </header>
@@ -325,7 +367,6 @@ const Dashboard = () => {
                         <div className="relative bg-[#2d5a27] p-8 rounded-full text-white shadow-2xl">
                           <Trophy size={64} />
                         </div>
-                        {/* RESTORED: PartyPopper used here to fix ESLint error */}
                         <motion.div
                           animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
                           transition={{ repeat: Infinity, duration: 4 }}

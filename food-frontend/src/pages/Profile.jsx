@@ -125,10 +125,6 @@ const Profile = () => {
                 {user.username || user.name}
               </h1>
 
-              <p className="text-[10px] font-bold text-[#6a9966] uppercase tracking-[0.25em] mb-8">
-                Premium Member
-              </p>
-
               <div className={`flex flex-col gap-4 text-left border-t ${border} pt-8 transition-colors`}>
                 <div className={`flex items-center gap-4 ${textSub}`}>
                   <div className={`p-2 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}>
@@ -211,9 +207,6 @@ const Profile = () => {
                 </div>
 
                 <div className={`pt-6 border-t ${border} flex justify-between items-center`}>
-                  <span className={`text-sm font-medium ${darkMode ? 'text-red-400' : 'text-red-700'}`}>
-                    Danger Zone
-                  </span>
                   <button className={`text-[9px] font-bold uppercase tracking-widest px-4 py-2 rounded-xl transition-all border ${
                     darkMode ? 'text-red-400 border-red-400/30 hover:bg-red-400/10' : 'text-red-700 border-red-200 hover:bg-red-50'
                   }`}>

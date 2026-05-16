@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'; // Removed unused React
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion'; // Removed unused AnimatePresence
 import { 
     ArrowLeft, Calendar, Utensils, Zap, Loader2, Info, 
     ChevronRight, ChevronLeft, Sun, Moon, CheckCircle2
