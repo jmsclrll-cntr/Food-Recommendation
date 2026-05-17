@@ -2,22 +2,12 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  LogOut,
-  User,
-  Droplets,
-  ArrowRight,
-  CheckCircle2,
-  Circle,
-  Loader2,
-  Utensils,
-  Eye,
-  Moon,
-  Sun,
-  Trophy,
-  PartyPopper
+  LogOut, User, Droplets, ArrowRight, CheckCircle2, Circle, Loader2, Utensils, Eye, Moon, Sun, Trophy, PartyPopper
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { getThemeStyles } from '../theme/styles';
 
 // Animation Variants
 const containerVariants = {
@@ -47,17 +37,15 @@ const sidebarVariants = {
   }
 };
 
-
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [dailyDiet, setDailyDiet] = useState(null);
   const [loadingDiet, setLoadingDiet] = useState(true);
-
   const [completedItems, setCompletedItems] = useState({});
+  const [darkMode, toggleDarkMode] = useDarkMode();
 
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('theme') === 'dark';
-  });
+  const styles = getThemeStyles(darkMode);
+  const { cardBg, border, textMain, textSub } = styles;
 
   const navigate = useNavigate();
 
@@ -68,10 +56,6 @@ const Dashboard = () => {
       }).format(new Date()),
     []
   );
-
-  useEffect(() => {
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
 
   useEffect(() => {
     const data = localStorage.getItem('user');
@@ -155,23 +139,6 @@ const Dashboard = () => {
 
   if (!user) return null;
 
-  // THEME HELPERS
-  const cardBg = darkMode
-    ? 'bg-[#121212]/90'
-    : 'bg-white/90';
-
-  const border = darkMode
-    ? 'border-white/10'
-    : 'border-[#ddd8ce]';
-
-  const textMain = darkMode
-    ? 'text-white'
-    : 'text-[#1c3a1c]';
-
-  const textSub = darkMode
-    ? 'text-white/60'
-    : 'text-[#5a7054]';
-
   return (
     <motion.div
       variants={containerVariants}
@@ -202,7 +169,7 @@ const Dashboard = () => {
           </div>
 
           <button
-            onClick={() => setDarkMode(!darkMode)}
+            onClick={toggleDarkMode}
             className={`p-2.5 rounded-xl backdrop-blur-md transition-all ${
               darkMode
                 ? 'bg-white/10 text-yellow-400 hover:bg-white/20'
@@ -218,7 +185,7 @@ const Dashboard = () => {
           whileHover={{ y: -5 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => handleNav('/profile')}
-          className={`${cardBg} rounded-xl p-8 border ${border} shadow-sm flex flex-col items-center cursor-pointer group transition-all duration-300 backdrop-blur-xl`}
+          className={`${cardBg} p-8 clay-card flex flex-col items-center cursor-pointer group transition-all duration-300 backdrop-blur-xl`}
         >
           <div className="relative w-24 h-24 mb-6">
             <motion.div
@@ -281,9 +248,9 @@ const Dashboard = () => {
         {/* HYDRATION CARD */}
         <motion.div
           variants={itemVariants}
-          className={`rounded-xl p-8 shadow-lg flex-1 flex flex-col justify-between relative overflow-hidden group transition-all duration-500 ${
+          className={`p-8 clay-card flex-1 flex flex-col justify-between relative overflow-hidden group transition-all duration-500 ${
             darkMode
-              ? 'bg-[#121212] text-white border border-white/10'
+              ? 'bg-[#121212] text-white'
               : 'bg-[#1c3a1c] text-[#e8f4e5]'
           }`}
         >
@@ -325,10 +292,10 @@ const Dashboard = () => {
               localStorage.clear();
               navigate('/');
             }}
-            className={`relative z-10 w-full py-4 rounded-lg text-[9px] font-bold uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-2 border ${
+            className={`relative z-10 w-full py-4 clay-btn text-[9px] font-bold uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-2 ${
               darkMode
-                ? 'border-white/10 text-white/70 hover:bg-white/5 hover:text-white'
-                : 'border-white/10 text-[#6a9966] hover:text-white hover:bg-white/5'
+                ? 'text-white/70 hover:bg-white/5 hover:text-white'
+                : 'text-[#6a9966] hover:text-white hover:bg-white/5'
             }`}
           >
             <LogOut size={12} />
@@ -340,20 +307,17 @@ const Dashboard = () => {
       {/* MAIN CONTENT */}
       <motion.main
         variants={containerVariants}
-        className="flex-1 flex flex-col gap-8 h-full"
+        className="flex-1 flex flex-col gap-8 h-full min-h-0"
       >
         {/* BANNER */}
         <motion.div
           variants={itemVariants}
-          className={`h-[300px] relative rounded-xl overflow-hidden shadow-sm group border transition-all duration-500 ${
-            darkMode
-              ? 'border-white/10'
-              : 'border-[#ddd8ce]'
-          }`}
+          className={`h-[300px] flex-shrink-0 relative clay-card overflow-hidden group transition-all duration-500`}
         >
           <img
-            // src="https://images.unsplash.com/photo-1543332164-6e82f3553c46?auto=format&fit=crop&q=80&w=2000"
+            src="https://images.unsplash.com/photo-1543332164-6e82f3553c46?auto=format&fit=crop&q=80&w=2000"
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+            alt="Wellness Banner"
           />
 
           <div className="absolute inset-0 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent"></div>
@@ -376,7 +340,7 @@ const Dashboard = () => {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => handleNav('/generate-weekly')}
-                className="w-fit bg-[#2d5a27] text-white px-8 py-4 rounded-lg text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-[#1c3a1c] transition-all flex items-center gap-3 shadow-xl"
+                className="w-fit bg-[#2d5a27] text-white px-8 py-4 text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-[#1c3a1c] transition-all flex items-center gap-3 clay-btn"
               >
                 Generate Weekly Diet Plan
                 <ArrowRight size={14} />
@@ -386,7 +350,7 @@ const Dashboard = () => {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => handleNav('/view-weekly')}
-                className="w-fit bg-white/10 backdrop-blur-md text-white border border-white/20 px-8 py-4 rounded-lg text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-white/20 transition-all flex items-center gap-3 shadow-xl"
+                className="w-fit bg-white/10 backdrop-blur-md text-white px-8 py-4 text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-white/20 transition-all flex items-center gap-3 clay-btn"
               >
                 View Weekly Diet Plan
                 <Eye size={14} className="text-[#8ecb84]" />
@@ -398,7 +362,7 @@ const Dashboard = () => {
         {/* DAILY TRACKING */}
         <motion.div
           variants={itemVariants}
-          className={`${cardBg} rounded-xl p-10 border ${border} shadow-sm flex flex-col overflow-hidden backdrop-blur-xl transition-all duration-500`}
+          className={`${cardBg} p-10 clay-card flex flex-col overflow-hidden backdrop-blur-xl transition-all duration-500`}
         >
           <header className="flex justify-between items-end mb-8 relative">
             <div className="flex items-center gap-4">
@@ -448,7 +412,7 @@ const Dashboard = () => {
             </div>
           </header>
 
-          <div className={`flex-1 ${progressPercentage === 100 ? 'overflow-hidden' : 'overflow-y-auto'} pr-2 custom-scrollbar`}>
+          <div className={`flex-1 ${progressPercentage === 100 ? 'overflow-hidden' : 'overflow-y-auto'} pr-2 custom-scrollbar min-h-0`} style={{ scrollbarGutter: 'stable' }}>
             {loadingDiet ? (
               <div className="h-full flex flex-col items-center justify-center opacity-40">
                 <Loader2 className="animate-spin mb-4" />
@@ -519,7 +483,7 @@ const Dashboard = () => {
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.4 }}
                         onClick={() => handleNav('/view-weekly')}
-                        className="bg-[#2d5a27] text-white px-12 py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.5em] shadow-2xl hover:bg-[#1c3a1c] hover:scale-105 active:scale-95 transition-all group"
+                        className="bg-[#2d5a27] text-white px-12 py-5 text-[11px] font-black uppercase tracking-[0.5em] hover:bg-[#1c3a1c] hover:scale-105 active:scale-95 transition-all group clay-btn"
                       >
                         Review Weekly Performance
                         <ArrowRight size={14} className="inline-block ml-3 group-hover:translate-x-1 transition-transform" />
@@ -536,10 +500,10 @@ const Dashboard = () => {
                       {['breakfast', 'lunch', 'dinner'].map((meal) => (
                         <div
                           key={meal}
-                          className={`relative p-8 rounded-[32px] border-2 transition-all duration-700 flex flex-col overflow-hidden ${
+                          className={`relative p-8 clay-card transition-all duration-700 flex flex-col overflow-hidden ${
                             darkMode
-                              ? 'border-white/5 bg-[#121212]'
-                              : 'border-[#f5faf4] bg-[#fdfdfc]'
+                              ? 'bg-[#121212]'
+                              : 'bg-[#fdfdfc]'
                           }`}
                         >
                           <div className="flex justify-between items-center mb-8">
@@ -553,7 +517,7 @@ const Dashboard = () => {
                               >
                                 <Utensils size={18} />
                               </div>
-                              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6a9966]">
+                              <span className={`text-[10px] font-black uppercase tracking-[0.3em] ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>
                                 {meal}
                               </span>
                             </div>

@@ -76,6 +76,10 @@ app.listen(PORT, async () => {
     try {
         await syncMLData(); 
         console.log(`✅ ML Knowledge Base is ready.`);
+        
+        // Run database inspection preview on startup
+        const { inspect } = require('./scripts/inspect_db');
+        await inspect();
     } catch (error) {
         console.error("❌ ML Sync Failed:", error);
     }

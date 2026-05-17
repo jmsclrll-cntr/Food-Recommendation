@@ -6,57 +6,24 @@ import {
     ChevronRight, ChevronLeft, Sun, Moon, CheckCircle2
 } from 'lucide-react';
 import axios from 'axios';
+import MissionCompleteSticker from '../components/MissionCompleteSticker';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { getThemeStyles } from '../theme/styles';
 
-const MissionCompleteSticker = () => (
-    <motion.div
-        initial={{ scale: 2, opacity: 0, rotate: -45 }}
-        animate={{ scale: 1, opacity: 1, rotate: -12 }}
-        transition={{ type: 'spring', damping: 12, stiffness: 200 }}
-        className="pointer-events-none z-20 flex-shrink-0"
-    >
-        <div className="relative flex items-center justify-center opacity-80">
-            {/* Outer Grunge Circle */}
-            <div className="w-20 h-20 border-4 border-red-600/60 rounded-full flex items-center justify-center p-1 border-dashed">
-                <div className="w-full h-full border-2 border-red-600/40 rounded-full flex items-center justify-center">
-                    <div className="border-2 border-red-700/70 px-3 py-1.5 transform rotate-2">
-                        <div className="flex flex-col items-center">
-                            <span className="text-[7px] font-black text-red-700/80 uppercase tracking-tighter leading-none mb-0.5">MISSION</span>
-                            <div className="h-[1.5px] w-full bg-red-700/60 mb-0.5"></div>
-                            <span className="text-[12px] font-black text-red-700 uppercase leading-none tracking-tight">COMPLETE</span>
-                            <div className="h-[1.5px] w-full bg-red-700/60 mt-0.5"></div>
-                            <div className="flex gap-0.5 mt-0.5">
-                                {[1,2,3].map(i => <span key={i} className="text-[7px] text-red-700/80">★</span>)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </motion.div>
-);
+import { DAYS } from '../utils/constants';
 
 const ViewWeekly = () => {
     const navigate = useNavigate();
     const [weeklyPlan, setWeeklyPlan] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeDayIdx, setActiveDayIdx] = useState(0);
+    const [darkMode, toggleDarkMode] = useDarkMode();
 
-    // --- DARK MODE LOGIC ---
-    const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
-
-    useEffect(() => {
-        localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-    }, [darkMode]);
-
-    // THEME HELPERS
-    const bgMain = darkMode ? 'bg-[#0d110d]' : 'bg-[#f5faf4]';
-    const cardBg = darkMode ? 'bg-[#1a1c1a]' : 'bg-white';
-    const border = darkMode ? 'border-white/10' : 'border-[#ddd8ce]';
-    const textMain = darkMode ? 'text-white' : 'text-[#1c3a1c]';
-    const textSub = darkMode ? 'text-white/60' : 'text-[#5a7054]';
-    const accentText = darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]';
+    const styles = getThemeStyles(darkMode);
+    const { bgMain, cardBg, border, textMain, textSub, accentText } = styles;
     
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const standardDays = DAYS;
+    const [orderedDays, setOrderedDays] = useState(standardDays);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -66,7 +33,35 @@ const ViewWeekly = () => {
 
         axios.get(`http://localhost:5000/api/diets/weekly/${userId}`)
             .then(res => {
-                setWeeklyPlan(res.data);
+                const planData = res.data;
+                setWeeklyPlan(planData);
+                
+                // Determine the starting day from the savedAt timestamp
+                const anyDay = Object.keys(planData).find(d => planData[d].savedAt);
+                if (anyDay) {
+                    const timestamp = planData[anyDay].savedAt;
+                    let savedDate;
+                    
+                    if (timestamp && timestamp._seconds) {
+                        savedDate = new Date(timestamp._seconds * 1000);
+                    } else {
+                        savedDate = new Date(timestamp);
+                    }
+
+                    if (!isNaN(savedDate.getTime())) {
+                        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const startDayName = dayNames[savedDate.getDay()];
+                        
+                        const startIndex = standardDays.indexOf(startDayName);
+                        if (startIndex !== -1) {
+                            const rotated = [
+                                ...standardDays.slice(startIndex),
+                                ...standardDays.slice(0, startIndex)
+                            ];
+                            setOrderedDays(rotated);
+                        }
+                    }
+                }
                 setLoading(false);
             })
             .catch(err => {
@@ -86,12 +81,12 @@ const ViewWeekly = () => {
         <div className={`h-screen flex flex-col items-center justify-center ${bgMain} text-center p-10`}>
             <h2 className={`font-serif text-3xl italic mb-4 ${textMain}`}>No Weekly Plan Found</h2>
             <p className={`text-sm mb-8 ${textSub}`}>You haven't saved a weekly plan yet. Generate one to get started.</p>
-            <button onClick={() => navigate('/generate-weekly')} className="bg-[#2d5a27] text-white px-8 py-4 rounded-xl font-bold text-[10px] uppercase tracking-[0.3em]">Generate Now</button>
+            <button onClick={() => navigate('/generate-weekly')} className="bg-[#2d5a27] text-white px-8 py-4 font-bold text-[10px] uppercase tracking-[0.3em] clay-btn">Generate Now</button>
         </div>
     );
 
-    const activeDay = days[activeDayIdx];
-    const currentDayPlan = weeklyPlan[activeDay];
+    const activeDay = orderedDays[activeDayIdx];
+    const currentDayPlan = weeklyPlan[activeDay]?.meals;
 
     const isDayComplete = (dayName) => {
         if (!weeklyPlan || !weeklyPlan[dayName]) return false;
@@ -112,7 +107,7 @@ const ViewWeekly = () => {
         let completedCount = 0;
 
         mealCategories.forEach(meal => {
-            const items = dayPlan[meal] || [];
+            const items = dayPlan.meals?.[meal] || [];
             totalItems += items.length;
             items.forEach((_, idx) => {
                 if (completedItems[`${meal}-${idx}`]) {
@@ -140,7 +135,7 @@ const ViewWeekly = () => {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <div className={`${cardBg} px-6 py-3 rounded-2xl border ${border} flex items-center gap-4 transition-colors`}>
+                    <div className={`${cardBg} px-6 py-3 flex items-center gap-4 transition-colors clay-card`}>
                         <div className="text-right">
                             <p className="text-[8px] font-black uppercase opacity-40">Current Day</p>
                             <p className="text-sm font-bold">{activeDay}</p>
@@ -150,7 +145,7 @@ const ViewWeekly = () => {
 
                     {/* Dark Mode Toggle */}
                     <button
-                        onClick={() => setDarkMode(!darkMode)}
+                        onClick={toggleDarkMode}
                         className={`p-3 rounded-xl backdrop-blur-md transition-all ${
                             darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/10 text-[#1c3a1c] hover:bg-black/5'
                         }`}
@@ -161,16 +156,15 @@ const ViewWeekly = () => {
             </header>
 
             <div className="flex-1 grid grid-cols-12 gap-8 min-h-0">
-                {/* Day Navigation Sidebar */}
                 <div className="col-span-3 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-                    {days.map((day, idx) => (
+                    {orderedDays.map((day, idx) => (
                         <button 
                             key={day} 
                             onClick={() => setActiveDayIdx(idx)}
-                            className={`w-full p-6 rounded-2xl border-2 transition-all text-left flex items-center justify-between group relative overflow-visible
+                            className={`w-full p-6 transition-all text-left flex items-center justify-between group relative overflow-visible clay-btn
                                 ${activeDayIdx === idx 
-                                    ? 'border-[#2d5a27] bg-[#1c3a1c] text-white shadow-lg' 
-                                    : `${border} ${cardBg} hover:border-[#2d5a27]`}`}
+                                    ? 'bg-[#1c3a1c] text-white scale-105' 
+                                    : `${cardBg} hover:border-[#2d5a27]`}`}
                         >
                             <div className="relative z-10">
                                 <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${activeDayIdx === idx ? 'text-[#8ecb84]' : 'text-[#6a9966]'}`}>Day 0{idx+1}</p>
@@ -187,7 +181,7 @@ const ViewWeekly = () => {
                 </div>
 
                 {/* Day Details View */}
-                <div className={`${cardBg} col-span-9 rounded-[40px] border ${border} shadow-sm flex flex-col overflow-hidden relative transition-colors`}>
+                <div className={`${cardBg} col-span-9 flex flex-col overflow-hidden relative transition-colors clay-card`}>
                     <div className={`p-10 border-b ${border} flex justify-between items-center ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
                         <div className="flex items-center gap-4 relative">
                             <div className="w-12 h-12 bg-[#2d5a27] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#2d5a27]/20">
@@ -203,8 +197,8 @@ const ViewWeekly = () => {
                             </h2>
                         </div>
                         <div className="flex gap-4">
-                            <button onClick={() => setActiveDayIdx(prev => Math.max(0, prev - 1))} disabled={activeDayIdx === 0} className={`p-4 ${cardBg} border ${border} rounded-2xl hover:opacity-70 disabled:opacity-30`}><ChevronLeft size={20}/></button>
-                            <button onClick={() => setActiveDayIdx(prev => Math.min(6, prev + 1))} disabled={activeDayIdx === 6} className={`p-4 ${cardBg} border ${border} rounded-2xl hover:opacity-70 disabled:opacity-30`}><ChevronRight size={20}/></button>
+                            <button onClick={() => setActiveDayIdx(prev => Math.max(0, prev - 1))} disabled={activeDayIdx === 0} className={`p-4 ${cardBg} hover:opacity-70 disabled:opacity-30 transition-all clay-btn`}><ChevronLeft size={20}/></button>
+                            <button onClick={() => setActiveDayIdx(prev => Math.min(6, prev + 1))} disabled={activeDayIdx === 6} className={`p-4 ${cardBg} hover:opacity-70 disabled:opacity-30 transition-all clay-btn`}><ChevronRight size={20}/></button>
                         </div>
                     </div>
 
@@ -214,7 +208,7 @@ const ViewWeekly = () => {
                                 <div key={type} className="space-y-6">
                                     <div className={`flex items-center gap-3 border-b ${border} pb-4`}>
                                         <span className="w-2 h-2 rounded-full bg-[#8ecb84]"></span>
-                                        <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#6a9966]">{type}</h3>
+                                        <h3 className={`text-[11px] font-black uppercase tracking-[0.3em] ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>{type}</h3>
                                     </div>
                                     <div className="space-y-4">
                                         {currentDayPlan?.[type]?.map((meal, mIdx) => (
@@ -222,7 +216,7 @@ const ViewWeekly = () => {
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 key={mIdx} 
-                                                className={`${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'} p-5 rounded-3xl border ${border} group hover:border-[#8ecb84] transition-all`}
+                                                className={`${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'} p-5 group hover:border-[#8ecb84] transition-all clay-card`}
                                             >
                                                 <div className="flex justify-between items-start mb-3">
                                                     <p className={`text-sm font-bold leading-tight flex-1 ${textMain}`}>{meal.name}</p>

@@ -1,5 +1,35 @@
 const { findMostFrequentGoal, getFoodDatabase } = require('../ml/mlDataService');
 const { recommendFoodKNN } = require('../ml/knnmodel');
+const { extractUniqueIngredients, sequentialSearch } = require('../utils/searchAlgorithms');
+
+let cachedIngredients = null;
+
+const getOrCacheIngredients = async () => {
+    if (cachedIngredients) return cachedIngredients;
+    const foodPool = await getFoodDatabase('none');
+    cachedIngredients = extractUniqueIngredients(foodPool);
+    return cachedIngredients;
+};
+
+exports.getAllIngredients = async (req, res) => {
+    try {
+        const ingredients = await getOrCacheIngredients();
+        res.status(200).json(ingredients);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.searchIngredients = async (req, res) => {
+    try {
+        const query = req.query.q || '';
+        const list = await getOrCacheIngredients();
+        const matched = sequentialSearch(list, query);
+        res.status(200).json(matched);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
 
 exports.getSuggestion = (req, res) => {
     try {
@@ -14,7 +44,38 @@ exports.getSuggestion = (req, res) => {
 exports.getAlternatives = async (req, res) => {
     try {
         const { type, condition } = req.query;
-        const foodPool = await getFoodDatabase(condition);
+        const allergies = req.query.allergies ? JSON.parse(req.query.allergies) : [];
+        let foodPool = await getFoodDatabase(condition);
+
+        // Exclude allergen items
+        if (allergies && allergies.length > 0) {
+            foodPool = foodPool.filter(f => {
+                if (!f.ingredients) return true;
+                let ingList = [];
+                if (Array.isArray(f.ingredients)) {
+                    ingList = f.ingredients;
+                } else if (typeof f.ingredients === 'string') {
+                    const trimmed = f.ingredients.trim();
+                    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                        try {
+                            ingList = JSON.parse(trimmed);
+                        } catch (e) {
+                            ingList = f.ingredients.split(',').map(x => x.trim().toLowerCase());
+                        }
+                    } else {
+                        ingList = f.ingredients.split(',').map(x => x.trim().toLowerCase());
+                    }
+                }
+                return !ingList.some(ing => {
+                    const cleanIng = ing.toLowerCase().trim();
+                    return allergies.some(allergy => {
+                        const cleanAllergy = allergy.toLowerCase().trim();
+                        return cleanIng.includes(cleanAllergy) || cleanAllergy.includes(cleanIng);
+                    });
+                });
+            });
+        }
+
         const filtered = foodPool.filter(f => f.type?.toLowerCase() === type?.toLowerCase());
         res.status(200).json(filtered);
     } catch (error) {
@@ -28,6 +89,7 @@ exports.getWeeklySuggestion = async (req, res) => {
         const height = parseFloat(req.body.height);
         const age = parseFloat(req.body.age || 25);
         const { gender, goal, condition } = req.body;
+        const allergies = req.body.allergies || [];
 
         let bmr = (10 * weight) + (6.25 * height) - (5 * age);
         bmr = (gender.toLowerCase() === 'male') ? bmr + 5 : bmr - 161;
@@ -35,7 +97,37 @@ exports.getWeeklySuggestion = async (req, res) => {
         if (goal === 'lose') tdee -= 500;
         if (goal === 'gain') tdee += 500;
 
-        const foodPool = await getFoodDatabase(condition);
+        let foodPool = await getFoodDatabase(condition);
+
+        // Exclude allergen items from KNN pool
+        if (allergies && allergies.length > 0) {
+            foodPool = foodPool.filter(f => {
+                if (!f.ingredients) return true;
+                let ingList = [];
+                if (Array.isArray(f.ingredients)) {
+                    ingList = f.ingredients;
+                } else if (typeof f.ingredients === 'string') {
+                    const trimmed = f.ingredients.trim();
+                    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                        try {
+                            ingList = JSON.parse(trimmed);
+                        } catch (e) {
+                            ingList = f.ingredients.split(',').map(x => x.trim().toLowerCase());
+                        }
+                    } else {
+                        ingList = f.ingredients.split(',').map(x => x.trim().toLowerCase());
+                    }
+                }
+                return !ingList.some(ing => {
+                    const cleanIng = ing.toLowerCase().trim();
+                    return allergies.some(allergy => {
+                        const cleanAllergy = allergy.toLowerCase().trim();
+                        return cleanIng.includes(cleanAllergy) || cleanAllergy.includes(cleanIng);
+                    });
+                });
+            });
+        }
+
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         let weeklyPlan = {};
         let usedFoodIds = new Set(); // Track every individual food used across the entire week

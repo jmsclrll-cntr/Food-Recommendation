@@ -5,6 +5,7 @@ import axios from 'axios';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
+import { useDarkMode } from '../hooks/useDarkMode';
 
 const EMOJIS = [
   { char: '🥗', size: '22px', top: '7%', left: '8%', delay: 0 },
@@ -33,18 +34,12 @@ const Login = () => {
   const navigate = useNavigate();
 
   // DARK MODE LOGIC
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('theme') === 'dark';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
+  const [darkMode, toggleDarkMode] = useDarkMode();
 
   useEffect(() => {
     const timer = setInterval(() => {
       setSloganIndex((prev) => (prev + 1) % SLOGANS.length);
-    }, 6000);
+    }, 8000);
     return () => clearInterval(timer);
   }, []);
 
@@ -83,18 +78,22 @@ const Login = () => {
   const border = darkMode ? 'border-white/10' : 'border-[#ddd8ce]';
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.5 }}
       className="relative min-h-screen flex items-center justify-center p-4 sm:p-8 bg-cover bg-center transition-colors duration-500"
       style={{ backgroundImage: "url('/bg4.png')" }}
     >
       {/* Dynamic Overlay */}
       <div className={`absolute inset-0 z-0 transition-opacity duration-500 ${darkMode ? 'bg-black/70' : 'bg-black/40'}`}></div>
 
-      <div className={`relative z-10 w-full max-w-4xl ${panelBg} rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px] transition-colors duration-500`}>
+      <div className={`relative z-10 w-full max-w-4xl ${panelBg} rounded-[32px] overflow-hidden clay-card flex flex-col md:flex-row min-h-[600px] transition-colors duration-500`}>
         
         {/* Theme Toggle Button (Absolute Positioned) */}
         <button
-          onClick={() => setDarkMode(!darkMode)}
+          onClick={toggleDarkMode}
           className={`absolute top-6 right-6 z-30 p-2 rounded-full backdrop-blur-md transition-all ${
             darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/5 text-gray-600 hover:bg-black/10'
           }`}
@@ -138,7 +137,7 @@ const Login = () => {
                 key={sloganIndex}
                 variants={{ 
                     hidden: { opacity: 1 }, 
-                    visible: { opacity: 1, transition: { staggerChildren: 0.05, delayChildren: 0.1 } } 
+                    visible: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.2 } } 
                 }}
                 initial="hidden" 
                 animate="visible" 
@@ -166,13 +165,14 @@ const Login = () => {
             </AnimatePresence>
           </div>
 
-          <div className="relative z-20 flex justify-between items-end">
+          <div className="relative z-20 grid grid-cols-1 gap-4">
             <div>
               <p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-[#8ecb84] pl-2 leading-none">7-Day</p>
               <p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Plan</p>
             </div>
-            <div className="text-right">
-              <p className="text-[10px] text-[#6a9966] uppercase tracking-[0.12em] font-medium">Created by NutriTeam</p>
+            <div>
+              <p className="text-xl font-semibold text-[#e8f4e5] border-l-2 border-[#8ecb84] pl-2 leading-none">NutriTeam</p>
+              <p className="text-[10px] text-[#6a9966] uppercase tracking-wider mt-1 pl-2">Creation</p>
             </div>
           </div>
         </div>
@@ -194,7 +194,7 @@ const Login = () => {
                     onChange={(e) => setEmail(e.target.value)} 
                     placeholder="Email" 
                     required 
-                    className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain}`} 
+                    className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
                   />
                 </div>
               </div>
@@ -209,7 +209,7 @@ const Login = () => {
                     onChange={(e) => setPassword(e.target.value)} 
                     placeholder="••••••••" 
                     required 
-                    className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain}`} 
+                    className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
                   />
                   <button 
                     type="button"
@@ -221,7 +221,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <button type="submit" className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group shadow-lg mt-4">
+              <button type="submit" className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn mt-4">
                 Sign In →
               </button>
             </form>
@@ -234,12 +234,12 @@ const Login = () => {
 
             <button 
               onClick={handleGoogle} 
-              className={`w-full h-12 ${darkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#c8c2b8] hover:bg-[#f5faf4]'} border-2 rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6`}
+              className={`w-full h-12 ${darkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#c8c2b8] hover:bg-[#f5faf4]'} border-2 rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6 clay-btn`}
             >
               <svg width="18" height="18" viewBox="0 0 48 48">
                 <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.6-6.6C35.4 2.7 30 .5 24 .5 14.7.5 6.7 6.1 3 14l7.8 6c1.9-5.5 7-9.5 13.2-9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.6A14.4 14.4 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.5 13.4A23.5 23.5 0 0 0 .5 24c0 3.8.9 7.4 2.5 10.6l7.8-6z"/><path fill="#34A853" d="M24 47.5c6 0 11-2 14.7-5.3l-7.5-5.8c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.4-4.2-13.2-9.9l-7.8 6C6.6 41.9 14.7 47.5 24 47.5z"/>
               </svg>
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-white/80' : 'text-gray-600'}`}>Continue with Google</span>
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-white/80' : 'text-gray-400'}`}>Continue with Google</span>
             </button>
 
             <p className="text-center text-[9px] text-gray-400 font-bold uppercase tracking-widest">
@@ -248,7 +248,7 @@ const Login = () => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

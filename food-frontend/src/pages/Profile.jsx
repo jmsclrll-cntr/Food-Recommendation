@@ -1,54 +1,30 @@
-import { useState, useEffect } from 'react'; // FIX 1: Removed unused 'React' import
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft,
-  Mail,
-  ShieldCheck,
-  Calendar,
-  Weight,
-  Ruler,
-  Activity,
-  Moon,
-  Sun,
-  Edit2
+  ArrowLeft, Mail, ShieldCheck, Calendar, Weight, Ruler, Activity, Moon, Sun, Edit2
 } from 'lucide-react';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { getThemeStyles } from '../theme/styles';
 
 const Profile = () => {
   const navigate = useNavigate();
-
-  // FIX 2: Initialize state directly from localStorage (Lazy Initializer)
-  // This fixes the "cascading renders" error.
   const [user] = useState(() => {
     const data = localStorage.getItem('user');
     return data ? JSON.parse(data) : null;
   });
 
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('theme') === 'dark';
-  });
+  const [darkMode, toggleDarkMode] = useDarkMode();
+  const styles = getThemeStyles(darkMode);
+  const { cardBg, border, textMain, textSub } = styles;
 
-  // Simplified useEffect to only handle redirection
   useEffect(() => {
     if (!user) {
       navigate('/');
     }
   }, [user, navigate]);
 
-  useEffect(() => {
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
-
-  // Prevent crashing if user isn't found
   if (!user) return null;
-
-  // THEME HELPERS
-  const cardBg = darkMode ? 'bg-[#121212]/90' : 'bg-white/90';
-  const border = darkMode ? 'border-white/10' : 'border-[#ddd8ce]';
-  const textMain = darkMode ? 'text-white' : 'text-[#1c3a1c]';
-  const textSub = darkMode ? 'text-white/60' : 'text-[#5a7054]';
-  
-  // FIX 3: Removed 'accentGreen' as it was unused (clears lint warning)
 
   return (
     <div
@@ -84,7 +60,7 @@ const Profile = () => {
           </div>
 
           <button
-            onClick={() => setDarkMode(!darkMode)}
+            onClick={toggleDarkMode}
             className={`p-2.5 rounded-xl backdrop-blur-md transition-all ${
               darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/10 text-white hover:bg-black/20'
             }`}
@@ -101,7 +77,7 @@ const Profile = () => {
             animate={{ opacity: 1, y: 0 }}
             className="col-span-12 lg:col-span-4 space-y-6"
           >
-            <div className={`${cardBg} backdrop-blur-xl rounded-[2rem] p-10 ${border} border shadow-2xl text-center transition-colors duration-500`}>
+            <div className={`${cardBg} backdrop-blur-xl p-10 text-center transition-colors duration-500 clay-card`}>
               
               <div className="relative w-36 h-36 mx-auto mb-6">
                 <div className={`absolute inset-0 rounded-full scale-110 blur-md transition-opacity ${darkMode ? 'bg-[#8ecb84]/20 opacity-100' : 'bg-[#8ecb84]/40 opacity-0'}`}></div>
@@ -149,7 +125,7 @@ const Profile = () => {
               </div>
             </div>
 
-            <button className="w-full bg-[#1c3a1c] text-white py-4 rounded-2xl text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-[#2d5a27] transition-all shadow-xl active:scale-[0.98]">
+            <button className="w-full bg-[#1c3a1c] text-white py-4 text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-[#2d5a27] transition-all active:scale-[0.98] clay-btn">
               Edit Detailed Profile
             </button>
           </motion.div>
@@ -161,7 +137,7 @@ const Profile = () => {
             transition={{ delay: 0.1 }}
             className="col-span-12 lg:col-span-8 space-y-8"
           >
-            <section className={`${cardBg} backdrop-blur-xl rounded-[2rem] p-8 ${border} border shadow-2xl transition-colors duration-500`}>
+            <section className={`${cardBg} backdrop-blur-xl p-8 transition-colors duration-500 clay-card`}>
               <h3 className={`font-serif text-xl italic mb-4 ${textMain}`}>
                 Personal Narrative
               </h3>
@@ -176,7 +152,7 @@ const Profile = () => {
               <InfoCard darkMode={darkMode} icon={<Activity size={20} />} label="Avg. BMI" value="22.8" />
             </div>
 
-            <div className={`${cardBg} backdrop-blur-xl rounded-[2rem] overflow-hidden ${border} border shadow-2xl transition-colors duration-500`}>
+            <div className={`${cardBg} backdrop-blur-xl overflow-hidden transition-colors duration-500 clay-card`}>
               <div className={`px-8 py-5 border-b ${border} bg-black/5`}>
                 <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#6a9966]">
                   Security & Preferences
@@ -208,8 +184,8 @@ const Profile = () => {
                   <span className={`text-sm font-medium ${darkMode ? 'text-red-400' : 'text-red-700'}`}>
                     Danger Zone
                   </span>
-                  <button className={`text-[9px] font-bold uppercase tracking-widest px-4 py-2 rounded-xl transition-all border ${
-                    darkMode ? 'text-red-400 border-red-400/30 hover:bg-red-400/10' : 'text-red-700 border-red-200 hover:bg-red-50'
+                  <button className={`text-[9px] font-bold uppercase tracking-widest px-4 py-2 transition-all clay-btn ${
+                    darkMode ? 'text-red-400 bg-red-400/10' : 'text-red-700 hover:bg-red-50'
                   }`}>
                     Delete Account
                   </button>
@@ -225,10 +201,10 @@ const Profile = () => {
 
 const InfoCard = ({ icon, label, value, darkMode }) => (
   <div
-    className={`backdrop-blur-xl rounded-[2rem] p-7 border transition-all duration-500 hover:translate-y-[-4px] ${
+    className={`backdrop-blur-xl p-7 transition-all duration-500 hover:translate-y-[-4px] clay-card ${
       darkMode
-        ? 'bg-[#121212]/90 border-white/10 shadow-2xl'
-        : 'bg-white/90 border-[#ddd8ce] shadow-xl'
+        ? 'bg-[#121212]/90'
+        : 'bg-white/90'
     }`}
   >
     <div className={`mb-5 transition-colors ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>

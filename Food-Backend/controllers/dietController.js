@@ -1,10 +1,6 @@
 const admin = require('firebase-admin');
 const db = admin.firestore();
 
-/**
- * Saves a 7-day diet plan into 7 separate collections as per USER request.
- * Collections: MondayPlans, TuesdayPlans, WednesdayPlans, etc.
- */
 exports.saveWeeklyPlan = async (req, res) => {
     try {
         const { userId, plan } = req.body;
@@ -80,7 +76,8 @@ exports.getWeeklyPlan = async (req, res) => {
             const collectionName = `${day}Plans`;
             const doc = await db.collection(collectionName).doc(userId).get();
             if (doc.exists) {
-                fullPlan[day] = doc.data().meals;
+                // Return the whole document so we have savedAt
+                fullPlan[day] = doc.data();
             }
         });
 

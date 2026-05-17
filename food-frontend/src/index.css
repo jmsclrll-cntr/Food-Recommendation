@@ -6,3 +6,69 @@ body {
   margin: 0;
   padding: 0;
 }
+
+@layer components {
+  /* Claymorphism Light Mode Utilities */
+  .clay-card {
+    @apply transition-all duration-300;
+    border-radius: 12px;
+    box-shadow: 
+      8px 8px 16px rgba(163, 177, 138, 0.2), 
+      -8px -8px 16px rgba(255, 255, 255, 0.8),
+      inset 4px 4px 8px rgba(255, 255, 255, 0.9),
+      inset -4px -4px 8px rgba(163, 177, 138, 0.1);
+  }
+
+  .clay-btn {
+    @apply transition-all duration-300;
+    border-radius: 10px;
+    box-shadow: 
+      4px 4px 10px rgba(163, 177, 138, 0.2), 
+      -4px -4px 10px rgba(255, 255, 255, 0.8),
+      inset 2px 2px 4px rgba(255, 255, 255, 0.5),
+      inset -2px -2px 4px rgba(163, 177, 138, 0.1);
+  }
+  
+  .clay-btn:active {
+    box-shadow: 
+      inset 4px 4px 10px rgba(163, 177, 138, 0.3), 
+      inset -4px -4px 10px rgba(255, 255, 255, 0.9);
+  }
+
+  .clay-input {
+    @apply transition-all duration-300;
+    border-radius: 10px;
+    box-shadow: 
+      inset 4px 4px 8px rgba(163, 177, 138, 0.15),
+      inset -4px -4px 8px rgba(255, 255, 255, 0.8);
+  }
+
+  /* Claymorphism Dark Mode Utilities */
+  .dark .clay-card {
+    box-shadow: 
+      8px 8px 16px rgba(0, 0, 0, 0.6), 
+      -8px -8px 16px rgba(45, 90, 39, 0.1),
+      inset 4px 4px 8px rgba(45, 90, 39, 0.2),
+      inset -4px -4px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .dark .clay-btn {
+    box-shadow: 
+      4px 4px 10px rgba(0, 0, 0, 0.6), 
+      -4px -4px 10px rgba(45, 90, 39, 0.1),
+      inset 2px 2px 4px rgba(45, 90, 39, 0.3),
+      inset -2px -2px 4px rgba(0, 0, 0, 0.4);
+  }
+
+  .dark .clay-btn:active {
+    box-shadow: 
+      inset 4px 4px 10px rgba(0, 0, 0, 0.6), 
+      inset -4px -4px 10px rgba(45, 90, 39, 0.2);
+  }
+
+  .dark .clay-input {
+    box-shadow: 
+      inset 4px 4px 8px rgba(0, 0, 0, 0.6),
+      inset -4px -4px 8px rgba(45, 90, 39, 0.1);
+  }
+}

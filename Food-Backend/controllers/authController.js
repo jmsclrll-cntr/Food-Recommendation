@@ -5,13 +5,13 @@ require('dotenv').config();
 // --- REGISTER ---
 const register = async (req, res) => {
     try {
-        const { email, password, username } = req.body;
+        const { email, password, username, name } = req.body;
 
         // 1. Better Validation
         if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
         
         // 2. FIRESTORE FIX: Ensure username is NEVER undefined
-        const finalUsername = username || email.split('@')[0] || "New User";
+        const finalUsername = username || name || email.split('@')[0] || "New User";
 
         // 3. Create user in Firebase AUTH
         const userRecord = await auth.createUser({
@@ -21,16 +21,21 @@ const register = async (req, res) => {
         });
 
         // 4. Save to Firestore (Fail-safe)
-        await db.collection('users').doc(userRecord.uid).set({
+        const userData = {
             uid: userRecord.uid,
             username: finalUsername,
             email: email,
             createdAt: new Date().toISOString(),
             role: "user",
             authMethod: "email"
-        });
+        };
 
-        res.status(201).json({ message: "Account created successfully!" });
+        await db.collection('users').doc(userRecord.uid).set(userData);
+
+        res.status(201).json({ 
+            message: "Account created successfully!",
+            user: userData
+        });
     } catch (error) {
         console.error("Register Error:", error.code);
         // Better error handling for UI
