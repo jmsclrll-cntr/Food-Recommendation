@@ -1,6 +1,7 @@
 const { findMostFrequentGoal, getFoodDatabase } = require('../ml/mlDataService');
 const { recommendFoodKNN } = require('../ml/knnmodel');
 const { extractUniqueIngredients, sequentialSearch } = require('../utils/searchAlgorithms');
+const { calculateBmr, calculateTdee, calculateTargetCalories } = require('../ml/utils');
 
 let cachedIngredients = null;
 
@@ -88,14 +89,12 @@ exports.getWeeklySuggestion = async (req, res) => {
         const weight = parseFloat(req.body.weight);
         const height = parseFloat(req.body.height);
         const age = parseFloat(req.body.age || 25);
-        const { gender, goal, condition } = req.body;
+        const { gender, goal, condition, activity } = req.body;
         const allergies = req.body.allergies || [];
 
-        let bmr = (10 * weight) + (6.25 * height) - (5 * age);
-        bmr = (gender.toLowerCase() === 'male') ? bmr + 5 : bmr - 161;
-        let tdee = bmr * 1.3; 
-        if (goal === 'lose') tdee -= 500;
-        if (goal === 'gain') tdee += 500;
+        const activeActivity = activity || 'moderate';
+        const bmr = calculateBmr(weight, height, age, gender);
+        const tdee = calculateTargetCalories(0, gender, goal, weight, height, age, activeActivity);
 
         let foodPool = await getFoodDatabase(condition);
 

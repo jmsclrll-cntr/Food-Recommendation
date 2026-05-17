@@ -50,7 +50,7 @@ const GenerateWeekly = () => {
   const allergyContainerRef = useRef(null);
 
   const [formData, setFormData] = useState({
-    gender: 'male', height: '', weight: '', age: 25, goal: 'maintain', condition: 'none'
+    gender: 'male', height: '', weight: '', age: 25, goal: 'maintain', condition: 'none', activity: 'moderate'
   });
 
   // Logic: BMI Calculation
@@ -61,6 +61,35 @@ const GenerateWeekly = () => {
     }
     return 0;
   }, [formData.height, formData.weight]);
+
+  // BMR & TDEE Calculations using Mifflin-St Jeor Equation
+  const calculatedBmr = useMemo(() => {
+    const w = parseFloat(formData.weight);
+    const h = parseFloat(formData.height);
+    const a = parseFloat(formData.age);
+    if (isNaN(w) || isNaN(h) || isNaN(a) || w <= 0 || h <= 0 || a <= 0) return 0;
+
+    let val = (10 * w) + (6.25 * h) - (5 * a);
+    if (formData.gender?.toLowerCase() === 'male') {
+      val += 5;
+    } else {
+      val -= 161;
+    }
+    return Math.round(val);
+  }, [formData.weight, formData.height, formData.age, formData.gender]);
+
+  const calculatedTdee = useMemo(() => {
+    if (calculatedBmr <= 0) return 0;
+    const ACTIVITY_FACTORS = {
+      sedentary: 1.2,
+      light: 1.375,
+      moderate: 1.55,
+      active: 1.725,
+      very_active: 1.9
+    };
+    const factor = ACTIVITY_FACTORS[formData.activity?.toLowerCase()] || 1.3;
+    return Math.round(calculatedBmr * factor);
+  }, [calculatedBmr, formData.activity]);
 
   // Click-outside listener to hide ingredients dropdown
   useEffect(() => {
@@ -100,6 +129,30 @@ const GenerateWeekly = () => {
     setLoading(false); 
   }, [navigate, user]);
 
+  // Load user biometrics if they exist
+  useEffect(() => {
+    if (user) {
+      const userId = user.id || user.uid || user._id;
+      axios.get(`http://localhost:5000/api/health/${userId}`)
+        .then(res => {
+          if (res.data) {
+            setFormData({
+              gender: res.data.gender || 'male',
+              height: res.data.height || '',
+              weight: res.data.weight || '',
+              age: res.data.age || 25,
+              goal: res.data.goal || 'maintain',
+              condition: res.data.condition || 'none',
+              activity: res.data.activity || 'moderate'
+            });
+            if (res.data.bmi) {
+              setBmiStatus(res.data.bmiCategory || "");
+            }
+          }
+        }).catch(err => console.log("No saved biometrics found or error fetching."));
+    }
+  }, [user]);
+
   // Logic: AI Suggestion Sync
   useEffect(() => {
     if (bmi > 0 && formData.gender) {
@@ -124,6 +177,23 @@ const GenerateWeekly = () => {
         setDailyTarget(planRes.data.dailyTarget);
         setIsSyncing(false);
         setIsSubmitted(true);
+
+        // Sync with health log database
+        const userId = user.id || user.uid || user._id;
+        try {
+          await axios.put(`http://localhost:5000/api/health/update/${userId}`, {
+            ...formData,
+            bmi: bmi
+          });
+        } catch (err) {
+          if (err.response && err.response.status === 404) {
+            await axios.post('http://localhost:5000/api/health/save', {
+              userId,
+              ...formData,
+              bmi: bmi
+            });
+          }
+        }
       }
     } catch (err) {
       setIsSyncing(false);
@@ -306,17 +376,39 @@ const GenerateWeekly = () => {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-6">
-                    <input type="number" placeholder="Height" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
-                    <input type="number" placeholder="Weight" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
+                <div className="grid grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Height (cm)</label>
+                      <input type="number" placeholder="Height" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Weight (kg)</label>
+                      <input type="number" placeholder="Weight" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Age (yrs)</label>
+                      <input type="number" placeholder="Age" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
+                    </div>
                 </div>
-                <div className="space-y-2">
-                  <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Goal</label>
-                  <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-4 border ${suggestion ? 'border-[#2d5a27] dark:border-[#5cb351]' : border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`}>
-                    <option className={optionStyles} value="lose">Weight Loss {suggestion === 'lose' && '(most pick)'}</option>
-                    <option className={optionStyles} value="gain">Weight Gain {suggestion === 'gain' && '(most pick)'}</option>
-                    <option className={optionStyles} value="maintain">Maintenance {suggestion === 'maintain' && '(most pick)'}</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Activity Level</label>
+                    <select value={formData.activity} onChange={e => setFormData({...formData, activity: e.target.value})} className={`w-full h-12 px-4 border ${border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`}>
+                      <option className={optionStyles} value="sedentary">Sedentary (No Exercise)</option>
+                      <option className={optionStyles} value="light">Lightly Active (1-3 days/wk)</option>
+                      <option className={optionStyles} value="moderate">Moderately Active (3-5 days/wk)</option>
+                      <option className={optionStyles} value="active">Very Active (6-7 days/wk)</option>
+                      <option className={optionStyles} value="very_active">Super Active (Extreme)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Goal</label>
+                    <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-4 border ${suggestion ? 'border-[#2d5a27] dark:border-[#5cb351]' : border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`}>
+                      <option className={optionStyles} value="lose">Weight Loss {suggestion === 'lose' && '(most pick)'}</option>
+                      <option className={optionStyles} value="gain">Weight Gain {suggestion === 'gain' && '(most pick)'}</option>
+                      <option className={optionStyles} value="maintain">Maintenance {suggestion === 'maintain' && '(most pick)'}</option>
+                    </select>
+                  </div>
                 </div>
  
                 {/* Allergy Filter Section */}
@@ -407,18 +499,37 @@ const GenerateWeekly = () => {
 
             {/* RESTORED BMI & INSIGHT CARDS */}
             <div className="grid grid-cols-2 gap-4 pb-10">
-              <div className="bg-[#2d5a27] dark:bg-[#5cb351] p-6 text-center text-[#e8f4e5] clay-card">
-                 <p className="text-[8px] font-black uppercase tracking-[0.4em] text-[#2d5a27] dark:text-white/60 mb-3">Calculated BMI</p>
-                 <h2 className="text-4xl font-serif mb-3">{bmi}</h2>
+              {/* Calculated BMI */}
+              <div className="bg-[#2d5a27] dark:bg-[#5cb351] p-6 text-center text-[#e8f4e5] clay-card flex flex-col justify-center items-center">
+                 <p className="text-[8px] font-black uppercase tracking-[0.4em] text-[#2d5a27] dark:text-white/60 mb-2">Calculated BMI</p>
+                 <h2 className="text-4xl font-serif mb-2 text-white">{bmi || "—"}</h2>
                  <div className="px-3 py-1 bg-[#2d5a27] dark:bg-[#5cb351] rounded-[10px] text-[7px] font-black uppercase tracking-widest inline-block shadow-inner">{bmiStatus || "Ready"}</div>
               </div>
-              <div className={`${cardBg} p-6 flex flex-col justify-center transition-colors clay-card`}>
+
+              {/* Live BMR & TDEE */}
+              <div className={`${cardBg} p-6 text-center transition-colors clay-card flex flex-col justify-center`}>
+                 <p className={`text-[8px] font-black uppercase tracking-[0.4em] ${textSub} mb-3`}>Daily Metabolism</p>
+                 <div className="flex justify-around items-center w-full">
+                   <div>
+                     <p className="text-xl font-serif italic text-[#2d5a27] dark:text-[#5cb351]">{calculatedBmr || "—"}</p>
+                     <p className={`text-[6px] font-black uppercase tracking-widest ${textSub} opacity-50`}>BMR (kcal)</p>
+                   </div>
+                   <div className="w-[1px] h-8 bg-black/10 dark:bg-white/10"></div>
+                   <div>
+                     <p className="text-xl font-serif italic text-[#2d5a27] dark:text-[#5cb351]">{calculatedTdee || "—"}</p>
+                     <p className={`text-[6px] font-black uppercase tracking-widest ${textSub} opacity-50`}>TDEE (kcal)</p>
+                   </div>
+                 </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className={`${cardBg} p-6 col-span-2 flex flex-col justify-center transition-colors clay-card`}>
                 <div className="flex items-center gap-2 mb-2">
                     <Info size={12} className="text-[#2d5a27] dark:text-[#5cb351]" />
                     <h4 className={`text-[8px] font-black uppercase tracking-widest ${textSub}`}>AI Insight</h4>
                 </div>
                 <p className="text-[10px] leading-relaxed italic opacity-80">
-                    {suggestion ? `Recommend ${suggestion.toUpperCase()} based on current biometric data.` : "Input metrics to sync model prediction."}
+                    {suggestion ? `Recommend ${suggestion.toUpperCase()} based on Mifflin-St Jeor daily metabolism of ${calculatedTdee || '—'} kcal.` : "Input metrics to sync model prediction."}
                 </p>
               </div>
             </div>

@@ -1,27 +1,47 @@
 const admin = require('firebase-admin');
 const { addToMemory } = require('../ml/mlDataService');
+const { calculateBmr, calculateTdee, calculateTargetCalories } = require('../ml/utils');
 
 exports.saveHealthProfile = async (req, res) => {
     const db = admin.firestore();
     try {
-        const { userId, height, weight, bmi, goal, condition, gender } = req.body;
+        const { userId, height, weight, bmi, goal, condition, gender, age, activity } = req.body;
         
         if (!userId) return res.status(400).json({ error: "User ID missing" });
+
+        const parsedWeight = parseFloat(weight);
+        const parsedHeight = parseFloat(height);
+        const parsedAge = parseInt(age || 25, 10);
+        const activeActivity = activity || 'moderate';
+
+        const bmrVal = calculateBmr(parsedWeight, parsedHeight, parsedAge, gender);
+        const tdeeVal = calculateTdee(parsedWeight, parsedHeight, parsedAge, gender, activeActivity);
+        const targetVal = calculateTargetCalories(parseFloat(bmi), gender, goal, parsedWeight, parsedHeight, parsedAge, activeActivity);
 
         await db.collection('health_logs').add({
             userId,
             gender,
-            height: parseFloat(height),
-            weight: parseFloat(weight),
+            height: parsedHeight,
+            weight: parsedWeight,
             bmi: parseFloat(bmi),
             goal,
             condition,
+            age: parsedAge,
+            activity: activeActivity,
+            bmr: bmrVal,
+            tdee: tdeeVal,
+            targetCalories: targetVal,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
         addToMemory({ gender, bmi: parseFloat(bmi), goal });
 
-        res.status(200).json({ message: "Health log added successfully" });
+        res.status(200).json({ 
+            message: "Health log added successfully",
+            bmr: bmrVal,
+            tdee: tdeeVal,
+            targetCalories: targetVal
+        });
     } catch (error) {
         console.error("SAVE ERROR:", error); 
         res.status(500).json({ error: error.message });
@@ -53,11 +73,19 @@ exports.getHealthProfile = async (req, res) => {
 exports.updateHealthData = async (req, res) => {
     const db = admin.firestore();
     const { userId } = req.params;
-    const { gender, height, weight, goal, condition, bmi } = req.body;
+    const { gender, height, weight, goal, condition, bmi, age, activity } = req.body;
 
     try {
+        const parsedWeight = parseFloat(weight);
+        const parsedHeight = parseFloat(height);
+        const parsedAge = parseInt(age || 25, 10);
+        const activeActivity = activity || 'moderate';
+
+        const bmrVal = calculateBmr(parsedWeight, parsedHeight, parsedAge, gender);
+        const tdeeVal = calculateTdee(parsedWeight, parsedHeight, parsedAge, gender, activeActivity);
+        const targetVal = calculateTargetCalories(parseFloat(bmi), gender, goal, parsedWeight, parsedHeight, parsedAge, activeActivity);
+
         // 1. Search for the user's log
-        // We remove .orderBy temporarily to avoid the Firebase 500 Index Error
         const snapshot = await db.collection('health_logs')
             .where('userId', '==', userId)
             .limit(1) 
@@ -72,21 +100,30 @@ exports.updateHealthData = async (req, res) => {
         // 2. Perform the update
         await db.collection('health_logs').doc(docId).update({
             gender,
-            height: parseFloat(height),
-            weight: parseFloat(weight),
+            height: parsedHeight,
+            weight: parsedWeight,
             bmi: parseFloat(bmi),
             goal,
             condition,
+            age: parsedAge,
+            activity: activeActivity,
+            bmr: bmrVal,
+            tdee: tdeeVal,
+            targetCalories: targetVal,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
         // 3. IMPORTANT: Sync with ML Memory
-        // This ensures the 7-day diet plan updates immediately after the click
         addToMemory({ gender, bmi: parseFloat(bmi), goal });
 
-        return res.status(200).json({ message: "Analysis updated successfully." });
+        return res.status(200).json({ 
+            message: "Analysis updated successfully.",
+            bmr: bmrVal,
+            tdee: tdeeVal,
+            targetCalories: targetVal
+        });
     } catch (error) {
         console.error("UPDATE ERROR:", error);
         return res.status(500).json({ error: error.message });
     }
-};
+};
