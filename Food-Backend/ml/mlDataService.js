@@ -17,14 +17,17 @@ const syncMLData = async () => {
     }
 };
 
-const getFoodDatabase = async (condition) => {
+const getFoodDatabase = async (conditions) => {
     const db = admin.firestore();
     const snapshot = await db.collection('foods').get();
     if (snapshot.empty) return [];
     let foods = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    if (condition === 'diabetes') foods = foods.filter(f => f.sugar <= 5);
-    if (condition === 'hypertension') foods = foods.filter(f => f.sodium <= 500);
+    const condArray = Array.isArray(conditions) ? conditions : (conditions ? [conditions] : []);
+
+    if (condArray.includes('diabetes')) foods = foods.filter(f => (f.sugar || 0) <= 5);
+    if (condArray.includes('hypertension')) foods = foods.filter(f => (f.sodium || 0) <= 500);
+    if (condArray.includes('heart disease')) foods = foods.filter(f => (f.fat || 0) <= 10 && (f.sodium || 0) <= 400);
     
     return foods;
 };

@@ -31,6 +31,7 @@ const GenerateWeekly = () => {
   const [loading, setLoading] = useState(true); 
   const [isSyncing, setIsSyncing] = useState(false); 
   const [isSubmitted, setIsSubmitted] = useState(false); 
+  const [isSaving, setIsSaving] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [activeDayIdx, setActiveDayIdx] = useState(0); 
   const [bmiStatus, setBmiStatus] = useState("");
@@ -50,7 +51,7 @@ const GenerateWeekly = () => {
   const allergyContainerRef = useRef(null);
 
   const [formData, setFormData] = useState({
-    gender: 'male', height: '', weight: '', age: 25, goal: 'maintain', condition: 'none', activity: 'moderate'
+    gender: '', height: '', weight: '', age: '', goal: '', conditions: [], activity: ''
   });
 
   // Logic: BMI Calculation
@@ -129,43 +130,37 @@ const GenerateWeekly = () => {
     setLoading(false); 
   }, [navigate, user]);
 
-  // Load user biometrics if they exist
-  useEffect(() => {
-    if (user) {
-      const userId = user.id || user.uid || user._id;
-      axios.get(`http://localhost:5000/api/health/${userId}`)
-        .then(res => {
-          if (res.data) {
-            setFormData({
-              gender: res.data.gender || 'male',
-              height: res.data.height || '',
-              weight: res.data.weight || '',
-              age: res.data.age || 25,
-              goal: res.data.goal || 'maintain',
-              condition: res.data.condition || 'none',
-              activity: res.data.activity || 'moderate'
-            });
-            if (res.data.bmi) {
-              setBmiStatus(res.data.bmiCategory || "");
-            }
-          }
-        }).catch(err => console.log("No saved biometrics found or error fetching."));
-    }
-  }, [user]);
+
 
   // Logic: AI Suggestion Sync
   useEffect(() => {
     if (bmi > 0 && formData.gender) {
       axios.get(`http://localhost:5000/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmi}`)
         .then(res => {
-          setSuggestion(res.data.goal);
+          let recGoal = res.data.goal?.toLowerCase() || 'maintain';
+          if (recGoal.includes('lose')) recGoal = 'lose';
+          if (recGoal.includes('gain')) recGoal = 'gain';
+          if (recGoal.includes('maintain')) recGoal = 'maintain';
+
+          setSuggestion(recGoal);
           setBmiStatus(res.data.category);
-          setFormData(prev => ({ ...prev, goal: res.data.goal }));
+          setFormData(prev => ({ ...prev, goal: prev.goal || recGoal }));
         }).catch(() => console.log("Prediction sync error."));
     }
   }, [bmi, formData.gender]);
 
   // Logic: Fetch Plan
+  const toggleCondition = (cond) => {
+    setFormData(prev => {
+      const isSelected = prev.conditions.includes(cond);
+      if (isSelected) {
+        return { ...prev, conditions: prev.conditions.filter(c => c !== cond) };
+      } else {
+        return { ...prev, conditions: [...prev.conditions, cond] };
+      }
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.height || !formData.weight) return;
@@ -177,23 +172,6 @@ const GenerateWeekly = () => {
         setDailyTarget(planRes.data.dailyTarget);
         setIsSyncing(false);
         setIsSubmitted(true);
-
-        // Sync with health log database
-        const userId = user.id || user.uid || user._id;
-        try {
-          await axios.put(`http://localhost:5000/api/health/update/${userId}`, {
-            ...formData,
-            bmi: bmi
-          });
-        } catch (err) {
-          if (err.response && err.response.status === 404) {
-            await axios.post('http://localhost:5000/api/health/save', {
-              userId,
-              ...formData,
-              bmi: bmi
-            });
-          }
-        }
       }
     } catch (err) {
       setIsSyncing(false);
@@ -201,19 +179,32 @@ const GenerateWeekly = () => {
     }
   };
 
-  // Logic: Save to DB
-  const handleSaveToProfile = async () => {
-    if (!user) return;
+  const handleSave = async () => {
     try {
-      setIsSyncing(true);
+      const storedUser = localStorage.getItem('user');
+      if (!storedUser) {
+        alert("You must be logged in to save plans.");
+        return;
+      }
+      const userObj = JSON.parse(storedUser);
+      const userId = userObj.uid || userObj.id || userObj._id;
+      
+      if (!userId) {
+        alert("User ID not found.");
+        return;
+      }
+
+      setIsSaving(true);
       await axios.post('http://localhost:5000/api/diets/save-weekly', {
-        userId: user.id || user.uid || user._id,
+        userId,
         plan: weeklyPlan
       });
-      setShowToast(true);
-      setTimeout(() => navigate('/dashboard'), 2500);
-    } catch (err) { alert("Failed to save."); } 
-    finally { setIsSyncing(false); }
+      alert("Plan saved successfully!");
+    } catch (err) {
+      alert("Error saving plan: " + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // --- NEW INTERACTIVE LOGIC ---
@@ -309,7 +300,7 @@ const GenerateWeekly = () => {
     }
 
     // Filter empty items
-    list = list.filter(item => item && item.trim().length > 0);
+    list = list.filter(item =>  item && item.trim().length > 0);
     if (list.length === 0) return null;
 
     return (
@@ -333,7 +324,36 @@ const GenerateWeekly = () => {
     );
   };
 
-  if (loading) return <div className={`h-screen flex items-center justify-center ${bgMain}`}><Loader2 className="animate-spin text-[#2d5a27] dark:text-[#5cb351]" /></div>;
+  const generateInsight = () => {
+    if (!suggestion) return "Input metrics to sync model prediction.";
+    
+    const actMap = {
+      sedentary: "sedentary",
+      light: "lightly active",
+      moderate: "moderately active",
+      active: "very active",
+      very_active: "super active"
+    };
+    
+    const act = actMap[formData.activity] || "active";
+    let conditionText = '';
+    if (formData.conditions && formData.conditions.length > 0) {
+      let restrictions = [];
+      if (formData.conditions.includes('diabetes')) restrictions.push('high sugar');
+      if (formData.conditions.includes('hypertension')) restrictions.push('high sodium');
+      if (formData.conditions.includes('heart disease')) restrictions.push('high fat and sodium');
+      
+      const uniqueRestrictions = [...new Set(restrictions.flatMap(r => r.split(' and ')))].join(' and ');
+      conditionText = ` Given your ${formData.conditions.join(' and ')} condition(s), we strictly filtered out ${uniqueRestrictions} foods from your plan.`;
+    }
+    const allergyText = selectedAllergies.length > 0 
+      ? ` We are strictly omitting ${selectedAllergies.length} allergen(s) from this profile.` 
+      : ' No dietary restrictions applied.';
+
+    return `Based on your biometrics (Age: ${formData.age}, ${formData.gender}, ${formData.height}cm, ${formData.weight}kg), your body's baseline energy requirement is ${calculatedBmr} kcal. Factoring in a ${act} lifestyle, your daily burn is approx ${calculatedTdee} kcal. To successfully ${suggestion.toUpperCase()} weight, we recommend a target intake of ${dailyTarget || calculatedTdee} kcal.${conditionText}${allergyText} Your BMI of ${bmi} (${bmiStatus}) is factored into these nutritional optimizations.`;
+  };
+
+  if (loading) return <div className={`h-screen flex items-center justify-center ${bgMain}`}><Loader2 className="animate-spin text-[#4a8a43] dark:text-[#6bcf5f]" /></div>;
 
   return (
     <div className={`h-screen w-full ${bgMain} ${textMain} p-10 overflow-hidden relative flex flex-col transition-all duration-500 ease-in-out`}>
@@ -354,46 +374,47 @@ const GenerateWeekly = () => {
         </button>
       </header>
  
-      <div className={`grid flex-1 min-h-0 transition-all duration-1000 ${isSubmitted ? 'grid-cols-12 gap-10' : 'grid-cols-1'}`}>
+      <div className={`grid flex-1 min-h-0 transition-all duration-500 ease-in-out ${isSubmitted ? 'grid-cols-12 gap-6 lg:gap-10' : 'grid-cols-1'}`}>
         
         {/* LEFT COLUMN (SIDEBAR) */}
-        <motion.div layout className={`${isSubmitted ? 'col-span-4' : 'max-w-xl mx-auto w-full'} flex flex-col h-full gap-6 min-h-0`}>
+        <motion.div 
+          layout 
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className={`${isSubmitted ? 'col-span-4 lg:col-span-3 overflow-y-auto custom-scrollbar pr-2' : 'max-w-2xl mx-auto w-full'} flex flex-col h-full gap-6 min-h-0`}
+        >
             {/* Input Card */}
-            <main className={`${cardBg} p-8 clay-card overflow-y-auto transition-colors custom-scrollbar`}>
-              <h3 className="font-serif text-3xl mb-8 italic">Biometrics</h3>
-              <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
+            {!isSubmitted ? (
+              <main className={`${cardBg} p-6 clay-card overflow-y-auto transition-colors custom-scrollbar flex-1`}>
+                <h3 className="font-serif text-3xl mb-6 italic">Biometrics</h3>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
                     <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Gender</label>
-                    <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className={`w-full h-10 ${darkMode ? 'bg-[#1a1c1a]' : 'bg-transparent'} border-b ${border} outline-none text-sm`}>
-                      <option className={optionStyles} value="male">Male</option><option className={optionStyles} value="female">Female</option>
+                    <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className={`w-full h-10 ${darkMode ? 'bg-[#1a1c1a]' : 'bg-transparent'} border-b ${border} outline-none text-sm`} required>
+                      <option className={optionStyles} value="" disabled>Select</option>
+                      <option className={optionStyles} value="male">Male</option>
+                      <option className={optionStyles} value="female">Female</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Status</label>
-                    <select value={formData.condition} onChange={e => setFormData({...formData, condition: e.target.value})} className={`w-full h-10 ${darkMode ? 'bg-[#1a1c1a]' : 'bg-transparent'} border-b ${border} outline-none text-sm`}>
-                      <option className={optionStyles} value="none">Healthy</option><option className={optionStyles} value="diabetes">Diabetes</option>
-                    </select>
+                  <div className="space-y-1.5">
+                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Age (yrs)</label>
+                    <input type="number" placeholder="Age" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Height (cm)</label>
+                    <input type="number" placeholder="Height" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Weight (kg)</label>
+                    <input type="number" placeholder="Weight" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                      <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Height (cm)</label>
-                      <input type="number" placeholder="Height" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
-                    </div>
-                    <div className="space-y-2">
-                      <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Weight (kg)</label>
-                      <input type="number" placeholder="Weight" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
-                    </div>
-                    <div className="space-y-2">
-                      <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Age (yrs)</label>
-                      <input type="number" placeholder="Age" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
+
+                <div className="grid grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
                     <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Activity Level</label>
-                    <select value={formData.activity} onChange={e => setFormData({...formData, activity: e.target.value})} className={`w-full h-12 px-4 border ${border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`}>
+                    <select value={formData.activity} onChange={e => setFormData({...formData, activity: e.target.value})} className={`w-full h-12 px-4 border ${border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`} required>
+                      <option className={optionStyles} value="" disabled>Select</option>
                       <option className={optionStyles} value="sedentary">Sedentary (No Exercise)</option>
                       <option className={optionStyles} value="light">Lightly Active (1-3 days/wk)</option>
                       <option className={optionStyles} value="moderate">Moderately Active (3-5 days/wk)</option>
@@ -401,14 +422,35 @@ const GenerateWeekly = () => {
                       <option className={optionStyles} value="very_active">Super Active (Extreme)</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Goal</label>
-                    <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-4 border ${suggestion ? 'border-[#2d5a27] dark:border-[#5cb351]' : border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`}>
+                    <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-4 border ${suggestion ? 'border-[#2d5a27] dark:border-[#5cb351]' : border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`} required>
+                      <option className={optionStyles} value="" disabled>Select</option>
                       <option className={optionStyles} value="lose">Weight Loss {suggestion === 'lose' && '(most pick)'}</option>
                       <option className={optionStyles} value="gain">Weight Gain {suggestion === 'gain' && '(most pick)'}</option>
                       <option className={optionStyles} value="maintain">Maintenance {suggestion === 'maintain' && '(most pick)'}</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Health Conditions Section */}
+                <div className="space-y-3 pt-2">
+                   <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Health Conditions</label>
+                   <div className="flex flex-wrap gap-2">
+                       {['Diabetes', 'Hypertension', 'Heart Disease'].map(cond => {
+                          const val = cond.toLowerCase();
+                          const isSelected = formData.conditions.includes(val);
+                          return (
+                             <div 
+                               key={val}
+                               onClick={() => toggleCondition(val)}
+                               className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase cursor-pointer select-none transition-colors ${isSelected ? 'bg-[#2d5a27] dark:bg-[#5cb351] text-white border-transparent' : `border-${border} ${textSub} hover:border-[#2d5a27]/50 dark:hover:border-[#5cb351]/50`}`}
+                             >
+                               {cond}
+                             </div>
+                          )
+                       })}
+                   </div>
                 </div>
  
                 {/* Allergy Filter Section */}
@@ -490,67 +532,120 @@ const GenerateWeekly = () => {
                     </div>
                   )}
                 </div>
- 
-                <button type="submit" className={`w-full h-14 bg-[#2d5a27] dark:bg-[#5cb351] text-white font-bold text-[10px] uppercase tracking-[0.3em] transition-all hover:scale-[1.02] active:scale-[0.98] clay-btn`}>
-                  {isSyncing ? <Loader2 className="animate-spin mx-auto" /> : "Generate Weekly Plan"}
-                </button>
+                <div className="flex justify-center mt-2">
+                  <button type="submit" className={`w-full max-w-[200px] h-11 bg-[#2d5a27] dark:bg-[#5cb351] text-white font-bold text-[9px] uppercase tracking-[0.3em] transition-all hover:scale-[1.05] active:scale-[0.95] clay-btn rounded-xl flex items-center justify-center`}>
+                    {isSyncing ? <Loader2 className="animate-spin mx-auto" /> : "Generate Plan"}
+                  </button>
+                </div>
               </form>
             </main>
+            ) : (
+              <div className={`${cardBg} p-6 clay-card flex flex-col transition-colors flex-shrink-0 mb-4`}>
+                <h3 className="font-serif text-2xl mb-6 italic text-center">Your Biometrics</h3>
+                
+                <div className="flex flex-col gap-y-5 mb-8 px-2 w-full">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Gender</p>
+                    <p className="text-sm font-bold capitalize">{formData.gender}</p>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Age</p>
+                    <p className="text-sm font-bold">{formData.age} yrs</p>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Height</p>
+                    <p className="text-sm font-bold">{formData.height} cm</p>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Weight</p>
+                    <p className="text-sm font-bold">{formData.weight} kg</p>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Activity</p>
+                    <p className="text-sm font-bold capitalize text-right ml-4 leading-tight">{formData.activity.replace('_', ' ')}</p>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Goal</p>
+                    <p className="text-sm font-bold capitalize text-right ml-4 leading-tight">{formData.goal}</p>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Conditions</p>
+                    <p className="text-sm font-bold capitalize text-right ml-4 leading-tight">{formData.conditions.length > 0 ? formData.conditions.join(', ') : 'None'}</p>
+                  </div>
+                  {selectedAllergies.length > 0 && (
+                    <div className="flex flex-col gap-3 pt-2">
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Exclusions</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedAllergies.map(a => (
+                          <span key={a} className="px-3 py-1.5 text-[11px] font-bold bg-[#4a8a43]/10 dark:bg-[#6bcf5f]/10 text-[#4a8a43] dark:text-[#6bcf5f] rounded-md">{a}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => setIsSubmitted(false)}
+                    className={`flex-1 py-4 border border-[#4a8a43] dark:border-[#6bcf5f] text-[#4a8a43] dark:text-[#6bcf5f] font-bold text-[10px] uppercase tracking-[0.3em] transition-all hover:bg-[#4a8a43]/10 dark:hover:bg-[#6bcf5f]/10 clay-btn`}
+                  >
+                    Edit Inputs
+                  </button>
+                  <button 
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className={`flex-1 py-4 bg-[#4a8a43] dark:bg-[#6bcf5f] text-white font-bold text-[10px] uppercase tracking-[0.3em] transition-all hover:bg-[#3d7a35] dark:hover:bg-[#5cb351] flex items-center justify-center gap-2 clay-btn disabled:opacity-50`}
+                  >
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                    {isSaving ? 'Saving...' : 'Save Plan'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* RESTORED BMI & INSIGHT CARDS */}
-            <div className="grid grid-cols-2 gap-4 pb-10">
+            <div className={`grid ${isSubmitted ? 'grid-cols-1' : 'grid-cols-4'} gap-4 pb-2 flex-shrink-0`}>
               {/* Calculated BMI */}
-              <div className="bg-[#2d5a27] dark:bg-[#5cb351] p-6 text-center text-[#e8f4e5] clay-card flex flex-col justify-center items-center">
-                 <p className="text-[8px] font-black uppercase tracking-[0.4em] text-[#2d5a27] dark:text-white/60 mb-2">Calculated BMI</p>
+              <div className={`${isSubmitted ? 'col-span-1' : 'col-span-1'} bg-[#4a8a43] dark:bg-[#6bcf5f] p-4 text-center text-white clay-card flex flex-col justify-center items-center`}>
+                 <p className="text-[8px] font-black uppercase tracking-[0.4em] text-white/70 mb-2">Calculated BMI</p>
                  <h2 className="text-4xl font-serif mb-2 text-white">{bmi || "—"}</h2>
-                 <div className="px-3 py-1 bg-[#2d5a27] dark:bg-[#5cb351] rounded-[10px] text-[7px] font-black uppercase tracking-widest inline-block shadow-inner">{bmiStatus || "Ready"}</div>
+                 <div className="px-3 py-1 bg-black/20 rounded-[10px] text-[7px] font-black uppercase tracking-widest inline-block shadow-inner">{bmiStatus || "Ready"}</div>
               </div>
 
               {/* Live BMR & TDEE */}
-              <div className={`${cardBg} p-6 text-center transition-colors clay-card flex flex-col justify-center`}>
-                 <p className={`text-[8px] font-black uppercase tracking-[0.4em] ${textSub} mb-3`}>Daily Metabolism</p>
+              <div className={`${isSubmitted ? 'col-span-1' : 'col-span-1'} bg-[#4a8a43] dark:bg-[#6bcf5f] p-4 text-center text-white transition-colors clay-card flex flex-col justify-center`}>
+                 <p className={`text-[8px] font-black uppercase tracking-[0.4em] text-white/70 mb-3`}>Daily Metabolism</p>
                  <div className="flex justify-around items-center w-full">
                    <div>
-                     <p className="text-xl font-serif italic text-[#2d5a27] dark:text-[#5cb351]">{calculatedBmr || "—"}</p>
-                     <p className={`text-[6px] font-black uppercase tracking-widest ${textSub} opacity-50`}>BMR (kcal)</p>
+                     <p className="text-xl font-serif italic text-white">{calculatedBmr || "—"}</p>
+                     <p className={`text-[6px] font-black uppercase tracking-widest text-white/60`}>BMR (kcal)</p>
                    </div>
-                   <div className="w-[1px] h-8 bg-black/10 dark:bg-white/10"></div>
+                   <div className="w-[1px] h-8 bg-white/20"></div>
                    <div>
-                     <p className="text-xl font-serif italic text-[#2d5a27] dark:text-[#5cb351]">{calculatedTdee || "—"}</p>
-                     <p className={`text-[6px] font-black uppercase tracking-widest ${textSub} opacity-50`}>TDEE (kcal)</p>
+                     <p className="text-xl font-serif italic text-white">{calculatedTdee || "—"}</p>
+                     <p className={`text-[6px] font-black uppercase tracking-widest text-white/60`}>TDEE (kcal)</p>
                    </div>
                  </div>
               </div>
 
               {/* AI Insight */}
-              <div className={`${cardBg} p-6 col-span-2 flex flex-col justify-center transition-colors clay-card`}>
+              <div className={`${isSubmitted ? 'col-span-1' : 'col-span-2'} bg-[#4a8a43] dark:bg-[#6bcf5f] p-5 text-white flex flex-col justify-center transition-colors clay-card flex-shrink-0`}>
                 <div className="flex items-center gap-2 mb-2">
-                    <Info size={12} className="text-[#2d5a27] dark:text-[#5cb351]" />
-                    <h4 className={`text-[8px] font-black uppercase tracking-widest ${textSub}`}>AI Insight</h4>
+                    <Info size={12} className="text-white/80" />
+                    <h4 className={`text-[8px] font-black uppercase tracking-widest text-white/70`}>AI Insight</h4>
                 </div>
-                <p className="text-[10px] leading-relaxed italic opacity-80">
-                    {suggestion ? `Recommend ${suggestion.toUpperCase()} based on Mifflin-St Jeor daily metabolism of ${calculatedTdee || '—'} kcal.` : "Input metrics to sync model prediction."}
+                <p className="text-[10px] leading-relaxed italic opacity-90">
+                    {generateInsight()}
                 </p>
               </div>
             </div>
 
-            {/* RELOCATED SAVE BUTTON */}
-            {isSubmitted && (
-              <motion.button 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                onClick={handleSaveToProfile} 
-                className={`w-full py-5 bg-[#2d5a27] dark:bg-[#5cb351] text-white flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all z-50 mb-10 clay-btn`}
-              >
-                  <Save size={20} className="text-white" />
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em]">Confirm & Save Plan</span>
-              </motion.button>
-            )}
+            {/* Removed RELOCATED SAVE BUTTON */}
         </motion.div>
 
         {/* RIGHT COLUMN (WEEKLY PLAN POP-UP) */}
         {isSubmitted && weeklyPlan && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-8 flex flex-col gap-6 min-h-0">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-9 flex flex-col gap-6 min-h-0">
             
             {/* Day Selector Icons */}
             <div className="flex items-center gap-3">

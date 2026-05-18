@@ -44,9 +44,15 @@ exports.getSuggestion = (req, res) => {
 
 exports.getAlternatives = async (req, res) => {
     try {
-        const { type, condition } = req.query;
+        const { type } = req.query;
+        let condArray = [];
+        if (req.query.conditions) {
+            try { condArray = JSON.parse(req.query.conditions); } catch(e) { condArray = [req.query.conditions]; }
+        } else if (req.query.condition) {
+            condArray = [req.query.condition];
+        }
         const allergies = req.query.allergies ? JSON.parse(req.query.allergies) : [];
-        let foodPool = await getFoodDatabase(condition);
+        let foodPool = await getFoodDatabase(condArray);
 
         // Exclude allergen items
         if (allergies && allergies.length > 0) {
@@ -89,14 +95,15 @@ exports.getWeeklySuggestion = async (req, res) => {
         const weight = parseFloat(req.body.weight);
         const height = parseFloat(req.body.height);
         const age = parseFloat(req.body.age || 25);
-        const { gender, goal, condition, activity } = req.body;
+        const { gender, goal, conditions, condition, activity } = req.body;
         const allergies = req.body.allergies || [];
+        const condArray = conditions || (condition ? [condition] : []);
 
         const activeActivity = activity || 'moderate';
         const bmr = calculateBmr(weight, height, age, gender);
         const tdee = calculateTargetCalories(0, gender, goal, weight, height, age, activeActivity);
 
-        let foodPool = await getFoodDatabase(condition);
+        let foodPool = await getFoodDatabase(condArray);
 
         // Exclude allergen items from KNN pool
         if (allergies && allergies.length > 0) {
@@ -136,71 +143,40 @@ exports.getWeeklySuggestion = async (req, res) => {
         const lPool = foodPool.filter(f => f.type?.toLowerCase() === 'lunch');
         const dPool = foodPool.filter(f => f.type?.toLowerCase() === 'dinner');
 
-        days.forEach((day, dayIndex) => {
-
-            // Bias jitter significantly downwards (range: 85% to 95%) 
-            // This ensures main meals are always under the goal, leaving room for supplements.
-            const jitter = 0.85 + (Math.random() * 0.1);
-            const dayTdee = tdee * jitter;
-
-            // Pick main meals using KNN with exclusion + wider K for more options
-            const lTarget = dayTdee * (0.40 + Math.random() * 0.10);
-            const lCandidates = recommendFoodKNN(lPool, lTarget, 15, usedFoodIds);
-            const lunch = lCandidates[0] || recommendFoodKNN(lPool, lTarget, 15)[0];
-
-            const remaining = dayTdee - (lunch?.calories || 0);
-            const bRatio = 0.40 + (Math.random() * 0.20);
-            const bTarget = remaining * bRatio;
-            const dTarget = remaining * (1 - bRatio);
-
-            const bCandidates = recommendFoodKNN(bPool, bTarget, 15, usedFoodIds);
-            const breakfast = bCandidates[0] || recommendFoodKNN(bPool, bTarget, 15)[0];
-
-            const dCandidates = recommendFoodKNN(dPool, dTarget, 15, usedFoodIds);
-            const dinner = dCandidates[0] || recommendFoodKNN(dPool, dTarget, 15)[0];
-
-            let bItems = breakfast ? [breakfast] : [];
-            let lItems = lunch ? [lunch] : [];
-            let dItems = dinner ? [dinner] : [];
-
-            let currentTotal = (breakfast?.calories || 0) + (lunch?.calories || 0) + (dinner?.calories || 0);
-            let deficit = tdee - currentTotal;
-
-            // Fill deficit with supplements until within 50 kcal of target
-            // STRATEGY: Always stay UNDER the target. Only add if food.calories <= deficit.
-            while (deficit > 10) { 
-                const currentDayIds = new Set([...bItems, ...lItems, ...dItems].map(i => i.id).filter(Boolean));
-                const tempUsed = new Set([...usedFoodIds, ...currentDayIds]);
-                
-                // 1. Filter for foods that actually FIT in the remaining deficit
-                let candidates = foodPool.filter(f => f.calories > 0 && f.calories <= deficit);
-                
-                if (candidates.length === 0) break; // No foods small enough to fit
-
-                // 2. Try to find a UNIQUE one from the fitting candidates
-                let uniqueCandidates = candidates.filter(f => !tempUsed.has(f.id));
-                let poolToUse = uniqueCandidates.length > 0 ? uniqueCandidates : candidates;
-
-                // 3. Pick the largest food that still fits
-                poolToUse.sort((a, b) => b.calories - a.calories); 
-                let supplement = poolToUse[0];
-                
-                if (!supplement) break;
-
-                const type = supplement.type?.toLowerCase();
-                if (type === 'breakfast') bItems.push(supplement);
-                else if (type === 'lunch') lItems.push(supplement);
-                else dItems.push(supplement);
-
-                currentTotal += supplement.calories || 0;
-                deficit = tdee - currentTotal;
+        const pickNFoods = (pool, targetCals, n, usedSet) => {
+            let picked = [];
+            let remainingTarget = targetCals;
+            for (let i = 0; i < n; i++) {
+                const avgTarget = remainingTarget / (n - i);
+                let candidates = recommendFoodKNN(pool, avgTarget, 15, usedSet);
+                let food = candidates[0];
+                if (!food) {
+                    // Fallback allowing reuse if pool is heavily restricted
+                    candidates = recommendFoodKNN(pool, avgTarget, 15, new Set());
+                    food = candidates[0];
+                }
+                if (food) {
+                    picked.push(food);
+                    if (food.id) usedSet.add(food.id);
+                    remainingTarget -= (food.calories || 0);
+                }
             }
+            return picked;
+        };
 
-            // Mark all selected foods as used globally
-            [...bItems, ...lItems, ...dItems].forEach(item => {
-                if (item?.id) usedFoodIds.add(item.id);
-            });
+        days.forEach((day, dayIndex) => {
+            // Distribute total TDEE into 3 meals: 30% Breakfast, 40% Lunch, 30% Dinner
+            const dayTdee = tdee; 
+            const bTarget = dayTdee * 0.30;
+            const lTarget = dayTdee * 0.40;
+            const dTarget = dayTdee * 0.30;
 
+            // Pick exactly 3 items per meal category to ensure perfect 3-3-3 distribution
+            const bItems = pickNFoods(bPool, bTarget, 3, usedFoodIds);
+            const lItems = pickNFoods(lPool, lTarget, 3, usedFoodIds);
+            const dItems = pickNFoods(dPool, dTarget, 3, usedFoodIds);
+
+            let currentTotal = [...bItems, ...lItems, ...dItems].reduce((sum, f) => sum + (f.calories || 0), 0);
 
             weeklyPlan[day] = {
                 breakfast: bItems,
