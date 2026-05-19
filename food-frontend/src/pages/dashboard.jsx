@@ -43,6 +43,7 @@ const Dashboard = () => {
   const [loadingDiet, setLoadingDiet] = useState(true);
   const [completedItems, setCompletedItems] = useState({});
   const [darkMode, toggleDarkMode] = useDarkMode();
+  const [completedDays, setCompletedDays] = useState(0);
 
   const styles = getThemeStyles(darkMode);
   const { cardBg, border, textMain, textSub } = styles;
@@ -86,6 +87,10 @@ const Dashboard = () => {
     if (savedProgress) {
       setCompletedItems(JSON.parse(savedProgress));
     }
+
+    // Load completed days count from localStorage
+    const savedDays = localStorage.getItem(`completed_days_${userId}`);
+    if (savedDays) setCompletedDays(parseInt(savedDays, 10));
   }, [navigate, today]);
 
   const toggleItem = (mealType, index) => {
@@ -105,6 +110,24 @@ const Dashboard = () => {
       `progress_${today}_${userId}`,
       JSON.stringify(nextState)
     );
+
+    // Check if this toggle completes the day — if so, record it
+    const mealCategories = ['breakfast', 'lunch', 'dinner'];
+    if (dailyDiet) {
+      const totalItems = mealCategories.reduce((acc, meal) =>
+        acc + (Array.isArray(dailyDiet[meal]) ? dailyDiet[meal].length : 0), 0);
+      const completedCount = Object.keys(nextState).filter(k => nextState[k]).length;
+      if (totalItems > 0 && completedCount >= totalItems) {
+        const dayKey = `day_done_${today}_${userId}`;
+        if (!localStorage.getItem(dayKey)) {
+          localStorage.setItem(dayKey, '1');
+          const prev = parseInt(localStorage.getItem(`completed_days_${userId}`) || '0', 10);
+          const next = prev + 1;
+          localStorage.setItem(`completed_days_${userId}`, next.toString());
+          setCompletedDays(next);
+        }
+      }
+    }
   };
 
   const progressPercentage = useMemo(() => {
@@ -245,64 +268,133 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
-        {/* HYDRATION CARD */}
-        <motion.div
-          variants={itemVariants}
-          className={`p-8 clay-card flex-1 flex flex-col justify-between relative overflow-hidden group transition-all duration-500 ${
-            darkMode
-              ? 'bg-[#121212] text-white'
-              : 'bg-[#1c3a1c] text-[#e8f4e5]'
-          }`}
-        >
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-4">
-              <Droplets size={14} className="text-[#8ecb84]" />
+        {/* MEAL ACHIEVEMENT CARD */}
+        {(() => {
+          // Determine the tier based on multiples of 7 days
+          const tier =
+            completedDays >= 28 ? { label: 'Legendary',   sub: 'Unstoppable!', color: '#f5c842', glow: 'rgba(245,200,66,0.25)',  icon: '🏆' } :
+            completedDays >= 21 ? { label: 'Champion',    sub: 'You\'re on fire!', color: '#8ecb84', glow: 'rgba(142,203,132,0.22)', icon: '🥇' } :
+            completedDays >= 14 ? { label: 'Dedicated',   sub: 'Solid consistency!', color: '#6ab8ff', glow: 'rgba(106,184,255,0.18)', icon: '🥈' } :
+            completedDays >= 7  ? { label: 'Consistent',  sub: 'Building momentum!', color: '#a8d8ea', glow: 'rgba(168,216,234,0.15)', icon: '🥉' } :
+                                  { label: 'Beginner',    sub: 'Keep going!', color: '#8ecb84', glow: 'rgba(142,203,132,0.1)',  icon: '💧' };
 
-              <span className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#6a9966]">
-                Daily Hydration
-              </span>
-            </div>
+          // Calculate progress within the current 7-day cycle
+          const currentCycleProgress = completedDays % 7 === 0 && completedDays > 0 ? 7 : completedDays % 7;
+          const toGo = 7 - currentCycleProgress;
 
-            <h3 className="font-serif text-2xl italic leading-tight mb-4">
-              Nourishment & <br /> Cellular Repair
-            </h3>
+          return (
+            <motion.div
+              variants={itemVariants}
+              className={`p-8 clay-card flex-1 flex flex-col justify-between relative overflow-hidden transition-all duration-500 ${
+                darkMode ? 'bg-[#121212] text-white' : 'bg-[#1c3a1c] text-[#e8f4e5]'
+              }`}
+            >
+              {/* Ambient glow */}
+              <motion.div
+                animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.65, 0.4] }}
+                transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+                style={{ background: `radial-gradient(circle, ${tier.glow} 0%, transparent 70%)` }}
+                className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 rounded-full blur-2xl pointer-events-none"
+              />
 
-            <div className="space-y-3 mt-8">
-              <div className="flex justify-between text-[9px] font-bold tracking-[0.2em] text-[#8ecb84]">
-                <span>PROGRESS</span>
-                <span>2.4 / 3.0 L</span>
+              {/* Header */}
+              <div className="relative z-10 flex items-center gap-2 mb-2">
+                <Trophy size={13} className="text-[#8ecb84]" />
+                <span className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#6a9966]">
+                  Diet Achievement
+                </span>
               </div>
 
-              <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+              {/* Central display */}
+              <div className="relative z-10 flex flex-col items-center justify-center flex-1 gap-3 py-4">
+                {/* Badge */}
                 <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: '80%' }}
-                  transition={{
-                    duration: 1.5,
-                    ease: 'easeOut'
-                  }}
-                  className="bg-[#8ecb84] h-full rounded-full"
-                />
-              </div>
-            </div>
-          </div>
+                  key={tier.label}
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 220, damping: 16 }}
+                  className="relative flex items-center justify-center"
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.18, 1], opacity: [0.3, 0.55, 0.3] }}
+                    transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+                    className="absolute w-24 h-24 rounded-full"
+                    style={{ background: `radial-gradient(circle, ${tier.glow} 0%, transparent 70%)` }}
+                  />
+                  <span className="text-7xl drop-shadow-2xl select-none">{tier.icon}</span>
+                </motion.div>
 
-          <button
-            onClick={() => {
-              localStorage.clear();
-              navigate('/');
-            }}
-            className={`relative z-10 w-full py-4 clay-btn text-[9px] font-bold uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-2 ${
-              darkMode
-                ? 'text-white/70 hover:bg-white/5 hover:text-white'
-                : 'text-[#6a9966] hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <LogOut size={12} />
-            Sign Out
-          </button>
-        </motion.div>
+                {/* Tier name */}
+                <motion.div
+                  key={tier.label + 'text'}
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="text-center"
+                >
+                  <p className="font-serif text-2xl italic mb-0.5" style={{ color: tier.color }}>
+                    {tier.label}
+                  </p>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#6a9966] opacity-70">
+                    {tier.sub}
+                  </p>
+                </motion.div>
+
+                {/* Days counter */}
+                <p className="text-[10px] font-black tracking-widest text-[#8ecb84] opacity-80 tabular-nums">
+                  {completedDays} Total Days
+                </p>
+
+                {/* Day pip indicators for current cycle */}
+                <div className="flex gap-2">
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: i * 0.05, type: 'spring', stiffness: 300 }}
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{
+                        background: i < currentCycleProgress ? tier.color : 'rgba(255,255,255,0.12)',
+                        boxShadow: i < currentCycleProgress ? `0 0 6px ${tier.color}80` : 'none'
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Thin progress bar */}
+                <div className="w-full bg-white/10 h-1 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(currentCycleProgress / 7) * 100}%` }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                    className="h-full rounded-full"
+                    style={{ background: tier.color }}
+                  />
+                </div>
+
+                <p className="text-[8px] font-bold uppercase tracking-widest text-[#6a9966] opacity-40">
+                  {toGo === 0 ? 'Cycle complete!' : `${toGo} day${toGo !== 1 ? 's' : ''} to next tier`}
+                </p>
+              </div>
+
+              {/* Sign Out */}
+              <button
+                onClick={() => { localStorage.clear(); navigate('/'); }}
+                className={`relative z-10 w-full py-4 clay-btn text-[9px] font-bold uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-2 ${
+                  darkMode ? 'text-white/70 hover:bg-white/5 hover:text-white' : 'text-[#6a9966] hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <LogOut size={12} />
+                Sign Out
+              </button>
+            </motion.div>
+          );
+        })()}
       </motion.aside>
+
+
+
 
       {/* MAIN CONTENT */}
       <motion.main

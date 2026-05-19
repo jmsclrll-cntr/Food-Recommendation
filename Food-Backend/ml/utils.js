@@ -32,7 +32,7 @@ exports.calculateBmr = (weight, height, age, gender) => {
 };
 
 exports.calculateTdee = (weight, height, age, gender, activity) => {
-    const bmr = this.calculateBmr(weight, height, age, gender);
+    const bmr = exports.calculateBmr(weight, height, age, gender);
     if (bmr === 0) return 0;
     const multiplier = ACTIVITY_MULTIPLIERS[activity?.toLowerCase()] || 1.3;
     return Math.round(bmr * multiplier);
@@ -41,31 +41,22 @@ exports.calculateTdee = (weight, height, age, gender, activity) => {
 exports.calculateTargetCalories = (bmi, gender, goal, weight, height, age, activity) => {
     // If advanced biometrics are provided, use Mifflin-St Jeor equation
     if (weight && height && age) {
-        const tdee = this.calculateTdee(weight, height, age, gender, activity);
+        const tdee = exports.calculateTdee(weight, height, age, gender, activity);
         let target = tdee;
-        const normGoal = goal?.toLowerCase();
-        if (normGoal === 'lose' || normGoal === 'lose weight') {
-            target -= 500;
-        } else if (normGoal === 'gain' || normGoal === 'gain weight') {
-            target += 500;
+        if (goal?.toLowerCase() === 'lose') {
+            target = tdee - 500;
+        } else if (goal?.toLowerCase() === 'gain') {
+            target = tdee + 500;
         }
         return Math.round(target);
     }
 
     // Baseline fallback
     let base = (gender?.toLowerCase() === 'male') ? 2200 : 1800;
-    const userGoal = goal?.toLowerCase();
-
-    if (userGoal === 'lose' || userGoal === 'lose weight') {
+    if (goal?.toLowerCase() === 'lose') {
         base -= 500;
-    } else if (userGoal === 'gain' || userGoal === 'gain weight') {
+    } else if (goal?.toLowerCase() === 'gain') {
         base += 500;
     }
-
-    const category = this.getBmiCategory(bmi);
-    if (category === "Obese" && (userGoal === "maintain" || userGoal === "maintenance")) {
-        base -= 200; 
-    }
-
     return Math.round(base);
 };

@@ -92,6 +92,17 @@ const GenerateWeekly = () => {
     return Math.round(calculatedBmr * factor);
   }, [calculatedBmr, formData.activity]);
 
+  const recommendedCalories = useMemo(() => {
+    if (calculatedTdee <= 0) return 0;
+    let target = calculatedTdee;
+    if (formData.goal?.toLowerCase() === 'lose') {
+      target = calculatedTdee - 500;
+    } else if (formData.goal?.toLowerCase() === 'gain') {
+      target = calculatedTdee + 500;
+    }
+    return Math.round(target);
+  }, [calculatedTdee, formData.goal]);
+
   // Click-outside listener to hide ingredients dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -325,7 +336,9 @@ const GenerateWeekly = () => {
   };
 
   const generateInsight = () => {
-    if (!suggestion) return "Input metrics to sync model prediction.";
+    if (!formData.gender || !formData.age || !formData.height || !formData.weight) {
+      return "Input metrics to sync dynamic biometrics calculation and target goals.";
+    }
     
     const actMap = {
       sedentary: "sedentary",
@@ -335,7 +348,7 @@ const GenerateWeekly = () => {
       very_active: "super active"
     };
     
-    const act = actMap[formData.activity] || "active";
+    const act = actMap[formData.activity?.toLowerCase()] || "moderately active";
     let conditionText = '';
     if (formData.conditions && formData.conditions.length > 0) {
       let restrictions = [];
@@ -350,7 +363,8 @@ const GenerateWeekly = () => {
       ? ` We are strictly omitting ${selectedAllergies.length} allergen(s) from this profile.` 
       : ' No dietary restrictions applied.';
 
-    return `Based on your biometrics (Age: ${formData.age}, ${formData.gender}, ${formData.height}cm, ${formData.weight}kg), your body's baseline energy requirement is ${calculatedBmr} kcal. Factoring in a ${act} lifestyle, your daily burn is approx ${calculatedTdee} kcal. To successfully ${suggestion.toUpperCase()} weight, we recommend a target intake of ${dailyTarget || calculatedTdee} kcal.${conditionText}${allergyText} Your BMI of ${bmi} (${bmiStatus}) is factored into these nutritional optimizations.`;
+    const goalLabel = formData.goal || suggestion || 'maintain';
+    return `Based on your biometrics (Age: ${formData.age}, ${formData.gender}, ${formData.height}cm, ${formData.weight}kg), your body's baseline energy requirement (BMR) is ${calculatedBmr} kcal. Factoring in a ${act} lifestyle, your daily burn (TDEE) is approx ${calculatedTdee} kcal. To successfully ${goalLabel.toUpperCase()} weight, we recommend a target intake of ${recommendedCalories || dailyTarget || calculatedTdee} kcal.${conditionText}${allergyText} Your BMI of ${bmi} (${bmiStatus || 'Normal'}) is factored into these nutritional optimizations.`;
   };
 
   if (loading) return <div className={`h-screen flex items-center justify-center ${bgMain}`}><Loader2 className="animate-spin text-[#4a8a43] dark:text-[#6bcf5f]" /></div>;
@@ -379,7 +393,7 @@ const GenerateWeekly = () => {
         {/* LEFT COLUMN (SIDEBAR) */}
         <motion.div 
           layout 
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={{ type: "spring", stiffness: 400, damping: 38, mass: 0.8 }}
           className={`${isSubmitted ? 'col-span-4 lg:col-span-3 overflow-y-auto custom-scrollbar pr-2' : 'max-w-2xl mx-auto w-full'} flex flex-col h-full gap-6 min-h-0`}
         >
             {/* Input Card */}
@@ -572,6 +586,19 @@ const GenerateWeekly = () => {
                     <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Conditions</p>
                     <p className="text-sm font-bold capitalize text-right ml-4 leading-tight">{formData.conditions.length > 0 ? formData.conditions.join(', ') : 'None'}</p>
                   </div>
+                  {bmi > 0 && (
+                    <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>BMI</p>
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-bold ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{bmi}</p>
+                        {bmiStatus && (
+                          <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#5cb351]/15 text-[#5cb351]' : 'bg-[#2d5a27]/10 text-[#2d5a27]'}`}>
+                            {bmiStatus}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {selectedAllergies.length > 0 && (
                     <div className="flex flex-col gap-3 pt-2">
                       <p className={`text-[10px] font-black uppercase tracking-widest ${textSub} opacity-60`}>Exclusions</p>
@@ -602,37 +629,12 @@ const GenerateWeekly = () => {
                 </div>
               </div>
             )}
-
-            {/* RESTORED BMI & INSIGHT CARDS */}
-            <div className={`grid ${isSubmitted ? 'grid-cols-1' : 'grid-cols-4'} gap-4 pb-2 flex-shrink-0`}>
-              {/* Calculated BMI */}
-              <div className={`${isSubmitted ? 'col-span-1' : 'col-span-1'} bg-[#4a8a43] dark:bg-[#6bcf5f] p-4 text-center text-white clay-card flex flex-col justify-center items-center`}>
-                 <p className="text-[8px] font-black uppercase tracking-[0.4em] text-white/70 mb-2">Calculated BMI</p>
-                 <h2 className="text-4xl font-serif mb-2 text-white">{bmi || "—"}</h2>
-                 <div className="px-3 py-1 bg-black/20 rounded-[10px] text-[7px] font-black uppercase tracking-widest inline-block shadow-inner">{bmiStatus || "Ready"}</div>
-              </div>
-
-              {/* Live BMR & TDEE */}
-              <div className={`${isSubmitted ? 'col-span-1' : 'col-span-1'} bg-[#4a8a43] dark:bg-[#6bcf5f] p-4 text-center text-white transition-colors clay-card flex flex-col justify-center`}>
-                 <p className={`text-[8px] font-black uppercase tracking-[0.4em] text-white/70 mb-3`}>Daily Metabolism</p>
-                 <div className="flex justify-around items-center w-full">
-                   <div>
-                     <p className="text-xl font-serif italic text-white">{calculatedBmr || "—"}</p>
-                     <p className={`text-[6px] font-black uppercase tracking-widest text-white/60`}>BMR (kcal)</p>
-                   </div>
-                   <div className="w-[1px] h-8 bg-white/20"></div>
-                   <div>
-                     <p className="text-xl font-serif italic text-white">{calculatedTdee || "—"}</p>
-                     <p className={`text-[6px] font-black uppercase tracking-widest text-white/60`}>TDEE (kcal)</p>
-                   </div>
-                 </div>
-              </div>
-
-              {/* AI Insight */}
-              <div className={`${isSubmitted ? 'col-span-1' : 'col-span-2'} bg-[#4a8a43] dark:bg-[#6bcf5f] p-5 text-white flex flex-col justify-center transition-colors clay-card flex-shrink-0`}>
+            {/* AI INSIGHT CARD */}
+            <div className="mt-6 pb-2 flex-shrink-0">
+              <div className="bg-[#4a8a43] dark:bg-[#6bcf5f] p-5 text-white flex flex-col justify-center transition-colors clay-card">
                 <div className="flex items-center gap-2 mb-2">
                     <Info size={12} className="text-white/80" />
-                    <h4 className={`text-[8px] font-black uppercase tracking-widest text-white/70`}>AI Insight</h4>
+                    <h4 className="text-[8px] font-black uppercase tracking-widest text-white/70">AI Insight</h4>
                 </div>
                 <p className="text-[10px] leading-relaxed italic opacity-90">
                     {generateInsight()}
@@ -646,7 +648,7 @@ const GenerateWeekly = () => {
         {/* RIGHT COLUMN (WEEKLY PLAN POP-UP) */}
         {isSubmitted && weeklyPlan && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-9 flex flex-col gap-6 min-h-0">
-            
+
             {/* Day Selector Icons */}
             <div className="flex items-center gap-3">
               {DYNAMIC_DAYS.map((day, idx) => (
@@ -670,23 +672,30 @@ const GenerateWeekly = () => {
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeDayIdx}
-                    initial={{    opacity: 0, scale: 0.98, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 1.02, y: -10 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    initial={{ opacity: 0, x: 18 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -18 }}
+                    transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
                     className={`${cardBg} p-8 flex-1 flex flex-col min-h-0 transition-colors clay-card`}
                   >
                     <div className="flex justify-between items-center mb-8 border-b pb-6 border-white/5">
                       <h2 className="font-serif text-3xl italic">{DYNAMIC_DAYS[activeDayIdx]} Narrative</h2>
-                      <div className="flex gap-8 text-right">
+                      <div className="flex gap-8 text-right items-center">
                         <div>
                           <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Intake Total</p>
                           <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{weeklyPlan[DYNAMIC_DAYS[activeDayIdx]].dailyTotal} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
                         </div>
-                        {dailyTarget > 0 && (
+                        {calculatedBmr > 0 && (
+                          <div className="pl-8 border-l border-white/5">
+                            <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Computed BMR</p>
+                            <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{calculatedBmr} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
+                          </div>
+                        )}
+
+                        {(dailyTarget > 0 || recommendedCalories > 0) && (
                           <div className="pl-8 border-l border-white/5">
                             <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Target Goal</p>
-                            <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{dailyTarget} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
+                            <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{dailyTarget || recommendedCalories} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
                           </div>
                         )}
                       </div>
@@ -757,13 +766,15 @@ const GenerateWeekly = () => {
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
             className="fixed inset-0 z-[400] bg-black/80 flex items-center justify-center p-6"
             onClick={() => setViewingDetails(null)}
           >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
               className={`${cardBg} w-full max-w-4xl overflow-hidden relative clay-card`}
               onClick={(e) => e.stopPropagation()}
             >
@@ -839,13 +850,15 @@ const GenerateWeekly = () => {
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
             className="fixed inset-0 z-[400] bg-black/80 flex items-center justify-center p-6"
             onClick={() => { setSwappingMeal(null); setIsAddingTo(null); setDbAlternatives([]); setSearchQuery(""); }}
           >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
               className={`${cardBg} w-full max-w-4xl h-[80vh] overflow-hidden relative flex flex-col clay-card`}
               onClick={(e) => e.stopPropagation()}
             >

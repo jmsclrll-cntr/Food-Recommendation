@@ -11,7 +11,7 @@ if (!admin.apps.length) {
 const inspect = async () => {
     const db = admin.firestore();
     try {
-        const snapshot = await db.collection('foods').limit(3).get();
+        const snapshot = await db.collection('foods').limit(1).get();
         if (snapshot.empty) {
             console.log("No foods found in DB!");
             return;

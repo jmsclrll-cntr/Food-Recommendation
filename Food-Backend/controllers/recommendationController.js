@@ -2,6 +2,7 @@ const { findMostFrequentGoal, getFoodDatabase } = require('../ml/mlDataService')
 const { recommendFoodKNN } = require('../ml/knnmodel');
 const { extractUniqueIngredients, sequentialSearch } = require('../utils/searchAlgorithms');
 const { calculateBmr, calculateTdee, calculateTargetCalories } = require('../ml/utils');
+const { pickDailyMealsOptimized } = require('../utils/combinationOptimizer');
 
 let cachedIngredients = null;
 
@@ -143,47 +144,9 @@ exports.getWeeklySuggestion = async (req, res) => {
         const lPool = foodPool.filter(f => f.type?.toLowerCase() === 'lunch');
         const dPool = foodPool.filter(f => f.type?.toLowerCase() === 'dinner');
 
-        const pickNFoods = (pool, targetCals, n, usedSet) => {
-            let picked = [];
-            let remainingTarget = targetCals;
-            for (let i = 0; i < n; i++) {
-                const avgTarget = remainingTarget / (n - i);
-                let candidates = recommendFoodKNN(pool, avgTarget, 15, usedSet);
-                let food = candidates[0];
-                if (!food) {
-                    // Fallback allowing reuse if pool is heavily restricted
-                    candidates = recommendFoodKNN(pool, avgTarget, 15, new Set());
-                    food = candidates[0];
-                }
-                if (food) {
-                    picked.push(food);
-                    if (food.id) usedSet.add(food.id);
-                    remainingTarget -= (food.calories || 0);
-                }
-            }
-            return picked;
-        };
-
-        days.forEach((day, dayIndex) => {
-            // Distribute total TDEE into 3 meals: 30% Breakfast, 40% Lunch, 30% Dinner
-            const dayTdee = tdee; 
-            const bTarget = dayTdee * 0.30;
-            const lTarget = dayTdee * 0.40;
-            const dTarget = dayTdee * 0.30;
-
-            // Pick exactly 3 items per meal category to ensure perfect 3-3-3 distribution
-            const bItems = pickNFoods(bPool, bTarget, 3, usedFoodIds);
-            const lItems = pickNFoods(lPool, lTarget, 3, usedFoodIds);
-            const dItems = pickNFoods(dPool, dTarget, 3, usedFoodIds);
-
-            let currentTotal = [...bItems, ...lItems, ...dItems].reduce((sum, f) => sum + (f.calories || 0), 0);
-
-            weeklyPlan[day] = {
-                breakfast: bItems,
-                lunch: lItems,
-                dinner: dItems,
-                dailyTotal: Math.round(currentTotal)
-            };
+        days.forEach((day) => {
+            const result = pickDailyMealsOptimized(bPool, lPool, dPool, tdee, usedFoodIds);
+            weeklyPlan[day] = result;
         });
 
         res.status(200).json({ plan: weeklyPlan, dailyTarget: Math.round(tdee) });
