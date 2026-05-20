@@ -137,7 +137,7 @@ exports.getWeeklySuggestion = async (req, res) => {
 
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         let weeklyPlan = {};
-        let usedFoodIds = new Set(); // Track every individual food used across the entire week
+        let usedFoodIds = {}; // { foodId: timesUsedThisWeek } — allows controlled repeats for small databases
 
         // Pre-filter pools once to save time
         const bPool = foodPool.filter(f => f.type?.toLowerCase() === 'breakfast');

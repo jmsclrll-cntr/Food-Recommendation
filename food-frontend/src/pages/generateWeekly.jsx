@@ -38,6 +38,7 @@ const GenerateWeekly = () => {
   const [suggestion, setSuggestion] = useState("");
   const [weeklyPlan, setWeeklyPlan] = useState(null);
   const [dailyTarget, setDailyTarget] = useState(0);
+  const [modalError, setModalError] = useState("");
   const [swappingMeal, setSwappingMeal] = useState(null); 
   const [dbAlternatives, setDbAlternatives] = useState([]);
   const [viewingDetails, setViewingDetails] = useState(null);
@@ -149,13 +150,13 @@ const GenerateWeekly = () => {
       axios.get(`http://localhost:5000/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmi}`)
         .then(res => {
           let recGoal = res.data.goal?.toLowerCase() || 'maintain';
-          if (recGoal.includes('lose')) recGoal = 'lose';
-          if (recGoal.includes('gain')) recGoal = 'gain';
-          if (recGoal.includes('maintain')) recGoal = 'maintain';
+          if (recGoal.includes('lose') || recGoal.includes('loss')) recGoal = 'lose';
+          if (recGoal.includes('gain') || recGoal.includes('build')) recGoal = 'gain';
+          if (recGoal.includes('maintain') || recGoal.includes('maintenance')) recGoal = 'maintain';
 
           setSuggestion(recGoal);
           setBmiStatus(res.data.category);
-          setFormData(prev => ({ ...prev, goal: prev.goal || recGoal }));
+          setFormData(prev => ({ ...prev, goal: recGoal }));
         }).catch(() => console.log("Prediction sync error."));
     }
   }, [bmi, formData.gender]);
@@ -210,7 +211,13 @@ const GenerateWeekly = () => {
         userId,
         plan: weeklyPlan
       });
-      alert("Plan saved successfully!");
+      
+      // Trigger glassmorphic toast & redirect to dashboard
+      setShowToast(true);
+      setTimeout(() => {
+        setShowToast(false);
+        navigate('/dashboard');
+      }, 2200);
     } catch (err) {
       alert("Error saving plan: " + (err.response?.data?.error || err.message));
     } finally {
@@ -228,6 +235,7 @@ const GenerateWeekly = () => {
   };
 
   const handleOpenSwap = async (item, day, mealType, idx) => {
+    setModalError("");
     setSwappingMeal({ day, mealType, idx, original: item });
     setIsSyncing(true);
     try {
@@ -238,6 +246,7 @@ const GenerateWeekly = () => {
   };
 
   const handleOpenAdd = async (day, mealType) => {
+    setModalError("");
     setIsAddingTo({ day, mealType });
     setIsSyncing(true);
     try {
@@ -249,17 +258,31 @@ const GenerateWeekly = () => {
 
   const handleSelectFood = (food) => {
     const updatedPlan = { ...weeklyPlan };
+    const targetCal = dailyTarget || recommendedCalories;
+
     if (swappingMeal) {
       const { day, mealType, idx, original } = swappingMeal;
+      const newTotal = updatedPlan[day].dailyTotal - (original.calories || 0) + (food.calories || 0);
+      if (targetCal > 0 && newTotal > targetCal) {
+        setModalError(`❌ Cannot swap meal! This would bring the day's total to ${newTotal} kcal, exceeding your daily target of ${targetCal} kcal.`);
+        return;
+      }
       updatedPlan[day][mealType][idx] = food;
-      updatedPlan[day].dailyTotal = updatedPlan[day].dailyTotal - (original.calories || 0) + (food.calories || 0);
+      updatedPlan[day].dailyTotal = newTotal;
       setSwappingMeal(null);
     } else if (isAddingTo) {
       const { day, mealType } = isAddingTo;
+      const newTotal = updatedPlan[day].dailyTotal + (food.calories || 0);
+      if (targetCal > 0 && newTotal > targetCal) {
+        setModalError(`❌ Cannot add meal! Adding ${food.name} would bring the day's total to ${newTotal} kcal, exceeding your daily target of ${targetCal} kcal.`);
+        return;
+      }
       updatedPlan[day][mealType].push(food);
-      updatedPlan[day].dailyTotal += (food.calories || 0);
+      updatedPlan[day].dailyTotal = newTotal;
       setIsAddingTo(null);
     }
+
+    setModalError("");
     setWeeklyPlan(updatedPlan);
     setDbAlternatives([]);
     setSearchQuery("");
@@ -707,33 +730,38 @@ const GenerateWeekly = () => {
                           <p className={`text-xs font-black uppercase mb-4 tracking-widest ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{m}</p>
                           <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                             {weeklyPlan[DYNAMIC_DAYS[activeDayIdx]][m].map((item, idx) => (
-                              <div key={idx} className={`${darkMode ? 'bg-white/5 border-white/20' : 'bg-white border-[#2d5a27]/30'} border p-5 flex flex-col gap-4 group/item transition-all clay-card`}>
-                                <div className="flex-1">
-                                  <span className="text-sm font-black block mb-1 leading-tight">{item.name}</span>
+                              <div key={idx} className="border p-6 min-h-[240px] flex flex-col gap-4 group/item transition-all rounded-xl relative overflow-hidden shadow-lg border-white/10">
+                                <div 
+                                  className="absolute inset-0 z-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-110"
+                                  style={{ backgroundImage: `url('${getImageUrl(item.imageUrl || item.imageURL || item.image || item.imagePath)}')` }}
+                                />
+                                <div className="absolute inset-0 z-0 bg-black/40 group-hover:bg-black/30 transition-colors duration-300" />
+                                <div className="flex-1 relative z-10">
+                                  <span className="text-base font-black block mb-1 leading-tight text-white drop-shadow-sm">{item.name}</span>
                                   <div className="flex items-center gap-2">
-                                    <span className={`text-[10px] font-bold ${textSub} opacity-50 uppercase tracking-widest`}>{item.calories} kcal</span>
-                                    <span className={`w-1 h-1 rounded-full ${darkMode ? 'bg-[#5cb351]/30' : 'bg-[#2d5a27]/30'}`}></span>
-                                    <span className={`text-[10px] font-bold ${textSub} opacity-50 uppercase tracking-widest`}>{item.grams}g</span>
+                                    <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{item.calories} kcal</span>
+                                    <span className="w-1 h-1 rounded-full bg-[#5cb351]"></span>
+                                    <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{item.grams}g</span>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2 pt-4 border-t border-white/5">
+                                <div className="flex items-center gap-2 pt-4 border-t border-white/10 relative z-10">
                                   <button 
                                     onClick={() => setViewingDetails(item)} 
-                                    className={`flex-1 py-2 flex items-center justify-center gap-2 transition-all bg-[#2d5a27] dark:bg-[#5cb351] text-white hover:scale-105 clay-btn`}
+                                    className="flex-1 py-2.5 flex items-center justify-center gap-2 transition-all backdrop-blur-md border border-white/20 hover:border-white/30 text-white bg-white/10 hover:bg-white/20 hover:scale-105 rounded-xl shadow-sm"
                                   >
                                     <Eye size={14}/> 
                                     <span className="text-[8px] font-black uppercase tracking-widest">Details</span>
                                   </button>
                                   <button 
                                     onClick={() => handleOpenSwap(item, DYNAMIC_DAYS[activeDayIdx], m, idx)} 
-                                    className={`flex-1 py-2 flex items-center justify-center gap-2 transition-all bg-[#2d5a27] dark:bg-[#5cb351] text-white hover:scale-105 clay-btn`}
+                                    className="flex-1 py-2.5 flex items-center justify-center gap-2 transition-all backdrop-blur-md border border-white/20 hover:border-white/30 text-white bg-white/10 hover:bg-white/20 hover:scale-105 rounded-xl shadow-sm"
                                   >
                                     <RefreshCw size={14}/> 
                                     <span className="text-[8px] font-black uppercase tracking-widest">Swap</span>
                                   </button>
                                   <button 
                                     onClick={() => handleDeleteItem(DYNAMIC_DAYS[activeDayIdx], m, idx)} 
-                                    className={`flex-1 py-2 flex items-center justify-center gap-2 transition-all bg-[#2d5a27] dark:bg-[#5cb351] text-white hover:scale-105 clay-btn`}
+                                    className="flex-1 py-2.5 flex items-center justify-center gap-2 transition-all backdrop-blur-md border border-white/20 hover:border-white/30 text-white bg-white/10 hover:bg-white/20 hover:scale-105 rounded-xl shadow-sm"
                                   >
                                     <Trash2 size={14}/> 
                                     <span className="text-[8px] font-black uppercase tracking-widest">Drop</span>
@@ -871,8 +899,15 @@ const GenerateWeekly = () => {
                     Browse biological alternatives for {swappingMeal?.mealType || isAddingTo?.type}
                   </p>
                 </div>
-                <button onClick={() => { setSwappingMeal(null); setIsAddingTo(null); setDbAlternatives([]); }} className={`p-3 rounded-xl ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'} clay-btn`}><X size={20}/></button>
+                <button onClick={() => { setSwappingMeal(null); setIsAddingTo(null); setDbAlternatives([]); setModalError(""); }} className={`p-3 rounded-xl ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'} clay-btn`}><X size={20}/></button>
               </div>
+
+              {modalError && (
+                <div className="mx-10 mt-6 p-4 bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 rounded-xl text-xs font-bold flex items-center justify-between shadow-sm animate-pulse">
+                  <span>{modalError}</span>
+                  <button onClick={() => setModalError("")} className="hover:opacity-75"><X size={14}/></button>
+                </div>
+              )}
 
               <div className="p-10 flex-1 overflow-hidden flex flex-col gap-8">
                 <div className="relative">
@@ -912,12 +947,34 @@ const GenerateWeekly = () => {
       {/* SUCCESS TOAST */}
       <AnimatePresence>
         {showToast && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                <div className={`${cardBg} p-12 rounded-[20px] text-center border-4 border-[#2d5a27] dark:border-[#5cb351]`}>
-                    <CheckCircle size={48} className="text-[#2d5a27] dark:text-[#5cb351] mx-auto mb-4" />
-                    <h2 className="font-serif text-3xl">Plan Saved!</h2>
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-md flex items-center justify-center"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 15 }}
+              className="bg-white/10 dark:bg-black/30 border border-white/20 dark:border-white/10 backdrop-blur-xl p-12 rounded-[24px] text-center max-w-sm w-full mx-6 shadow-2xl flex flex-col items-center gap-6"
+            >
+              <div className="relative">
+                <motion.div
+                  animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                  className="absolute inset-0 bg-[#5cb351]/30 dark:bg-[#5cb351]/20 rounded-full blur-xl scale-150"
+                />
+                <div className="relative bg-[#2d5a27] dark:bg-[#5cb351] p-5 rounded-full text-white shadow-xl">
+                  <CheckCircle size={40} className="animate-pulse" />
                 </div>
+              </div>
+              <div>
+                <h2 className="font-serif text-3xl italic text-white mb-2 leading-tight">Meal Saved!</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#8ecb84]">Loading Dashboard Schedule</p>
+              </div>
             </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 

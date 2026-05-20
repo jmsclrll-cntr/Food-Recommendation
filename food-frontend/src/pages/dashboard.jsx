@@ -44,6 +44,7 @@ const Dashboard = () => {
   const [completedItems, setCompletedItems] = useState({});
   const [darkMode, toggleDarkMode] = useDarkMode();
   const [completedDays, setCompletedDays] = useState(0);
+  const [imageErrors, setImageErrors] = useState({});
 
   const styles = getThemeStyles(darkMode);
   const { cardBg, border, textMain, textSub } = styles;
@@ -57,6 +58,61 @@ const Dashboard = () => {
       }).format(new Date()),
     []
   );
+
+  const [currentImageIdx, setCurrentImageIdx] = useState(0);
+
+  const getImageUrl = (url) => {
+    if (!url) return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=1000';
+    try {
+      if (url.includes('imgurl=') || url.includes('url=') || url.includes('q=')) {
+        const urlObj = new URL(url);
+        const imgUrl = urlObj.searchParams.get('imgurl') || urlObj.searchParams.get('url') || urlObj.searchParams.get('q');
+        if (imgUrl) {
+          let decoded = decodeURIComponent(imgUrl);
+          if (!decoded.startsWith('http://') && !decoded.startsWith('https://')) {
+            decoded = 'https://' + decoded;
+          }
+          return decoded;
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing search image URL:", e);
+    }
+    return url;
+  };
+
+  const bannerImages = useMemo(() => {
+    const images = [];
+    if (dailyDiet) {
+      ['breakfast', 'lunch', 'dinner'].forEach(meal => {
+        if (Array.isArray(dailyDiet[meal])) {
+          dailyDiet[meal].forEach(item => {
+            const img = item.imageUrl || item.imageURL || item.image || item.imagePath;
+            if (img && !img.includes('placeholder')) {
+              images.push(getImageUrl(img));
+            }
+          });
+        }
+      });
+    }
+    if (images.length === 0) {
+      return [
+        "https://images.unsplash.com/photo-1543332164-6e82f3553c46?auto=format&fit=crop&q=80&w=2000",
+        "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&q=80&w=2000",
+        "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&q=80&w=2000",
+        "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=2000"
+      ];
+    }
+    return images;
+  }, [dailyDiet]);
+
+  useEffect(() => {
+    if (bannerImages.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentImageIdx(prev => (prev + 1) % bannerImages.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [bannerImages]);
 
   useEffect(() => {
     const data = localStorage.getItem('user');
@@ -95,12 +151,16 @@ const Dashboard = () => {
 
   const toggleItem = (mealType, index) => {
     const itemKey = `${mealType}-${index}`;
-    if (completedItems[itemKey]) return;
+    const nextCompleted = !completedItems[itemKey];
 
     const nextState = {
       ...completedItems,
-      [itemKey]: true
+      [itemKey]: nextCompleted
     };
+
+    if (!nextCompleted) {
+      delete nextState[itemKey];
+    }
 
     setCompletedItems(nextState);
 
@@ -111,18 +171,28 @@ const Dashboard = () => {
       JSON.stringify(nextState)
     );
 
-    // Check if this toggle completes the day — if so, record it
+    // Check if this toggle completes or breaks the day completion
     const mealCategories = ['breakfast', 'lunch', 'dinner'];
     if (dailyDiet) {
       const totalItems = mealCategories.reduce((acc, meal) =>
         acc + (Array.isArray(dailyDiet[meal]) ? dailyDiet[meal].length : 0), 0);
+      
       const completedCount = Object.keys(nextState).filter(k => nextState[k]).length;
+      const dayKey = `day_done_${today}_${userId}`;
+
       if (totalItems > 0 && completedCount >= totalItems) {
-        const dayKey = `day_done_${today}_${userId}`;
         if (!localStorage.getItem(dayKey)) {
           localStorage.setItem(dayKey, '1');
           const prev = parseInt(localStorage.getItem(`completed_days_${userId}`) || '0', 10);
           const next = prev + 1;
+          localStorage.setItem(`completed_days_${userId}`, next.toString());
+          setCompletedDays(next);
+        }
+      } else {
+        if (localStorage.getItem(dayKey)) {
+          localStorage.removeItem(dayKey);
+          const prev = parseInt(localStorage.getItem(`completed_days_${userId}`) || '0', 10);
+          const next = Math.max(0, prev - 1);
           localStorage.setItem(`completed_days_${userId}`, next.toString());
           setCompletedDays(next);
         }
@@ -168,16 +238,21 @@ const Dashboard = () => {
       initial="hidden"
       animate="visible"
       exit="exit"
-      className={`h-screen w-full font-sans antialiased p-10 overflow-hidden flex gap-10 transition-all duration-500 ${
-        darkMode
-          ? 'bg-[#0b0b0b] text-white'
-          : 'bg-[#f5faf4] text-[#1c3a1c]'
+      className={`h-screen w-full font-sans antialiased p-6 overflow-hidden flex gap-6 transition-all duration-500 ${
+        darkMode ? 'text-white' : 'text-[#1c3a1c]'
       }`}
+      style={{
+        backgroundImage: darkMode 
+          ? 'linear-gradient(rgba(11, 11, 11, 0.88), rgba(11, 11, 11, 0.88)), url("/bg.png")' 
+          : 'linear-gradient(rgba(245, 250, 244, 0.88), rgba(245, 250, 244, 0.88)), url("/bg.png")',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
     >
       {/* SIDEBAR */}
       <motion.aside
         variants={sidebarVariants}
-        className="w-[380px] flex flex-col gap-6 h-full"
+        className="w-[330px] flex flex-col gap-6 h-full flex-shrink-0"
       >
         {/* HEADER */}
         <header className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -272,11 +347,11 @@ const Dashboard = () => {
         {(() => {
           // Determine the tier based on multiples of 7 days
           const tier =
-            completedDays >= 28 ? { label: 'Legendary',   sub: 'Unstoppable!', color: '#f5c842', glow: 'rgba(245,200,66,0.25)',  icon: '🏆' } :
-            completedDays >= 21 ? { label: 'Champion',    sub: 'You\'re on fire!', color: '#8ecb84', glow: 'rgba(142,203,132,0.22)', icon: '🥇' } :
-            completedDays >= 14 ? { label: 'Dedicated',   sub: 'Solid consistency!', color: '#6ab8ff', glow: 'rgba(106,184,255,0.18)', icon: '🥈' } :
-            completedDays >= 7  ? { label: 'Consistent',  sub: 'Building momentum!', color: '#a8d8ea', glow: 'rgba(168,216,234,0.15)', icon: '🥉' } :
-                                  { label: 'Beginner',    sub: 'Keep going!', color: '#8ecb84', glow: 'rgba(142,203,132,0.1)',  icon: '💧' };
+            completedDays >= 28 ? { label: 'Legendary',   sub: 'Unstoppable!', color: '#f5c842', glow: 'rgba(245,200,66,0.25)',  icon: '🏆', image: 'legendary.png' } :
+            completedDays >= 21 ? { label: 'Champion',    sub: 'You\'re on fire!', color: '#8ecb84', glow: 'rgba(142,203,132,0.22)', icon: '🥇', image: 'champion.png' } :
+            completedDays >= 14 ? { label: 'Dedicated',   sub: 'Solid consistency!', color: '#6ab8ff', glow: 'rgba(106,184,255,0.18)', icon: '🥈', image: 'dedicated.png' } :
+            completedDays >= 7  ? { label: 'Consistent',  sub: 'Building momentum!', color: '#a8d8ea', glow: 'rgba(168,216,234,0.15)', icon: '🥉', image: 'consistent.png' } :
+                                  { label: 'Beginner',    sub: 'Keep going!', color: '#8ecb84', glow: 'rgba(142,203,132,0.1)',  icon: '💧', image: 'beginner.png' };
 
           // Calculate progress within the current 7-day cycle
           const currentCycleProgress = completedDays % 7 === 0 && completedDays > 0 ? 7 : completedDays % 7;
@@ -313,7 +388,7 @@ const Dashboard = () => {
                   initial={{ scale: 0.6, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: 'spring', stiffness: 220, damping: 16 }}
-                  className="relative flex items-center justify-center"
+                  className="relative flex items-center justify-center min-h-[96px]"
                 >
                   <motion.div
                     animate={{ scale: [1, 1.18, 1], opacity: [0.3, 0.55, 0.3] }}
@@ -321,7 +396,21 @@ const Dashboard = () => {
                     className="absolute w-24 h-24 rounded-full"
                     style={{ background: `radial-gradient(circle, ${tier.glow} 0%, transparent 70%)` }}
                   />
-                  <span className="text-7xl drop-shadow-2xl select-none">{tier.icon}</span>
+                  {imageErrors[tier.label.toLowerCase()] ? (
+                    <span className="text-7xl drop-shadow-2xl select-none">{tier.icon}</span>
+                  ) : (
+                    <img
+                      src={`/trophies/${tier.image}`}
+                      alt={tier.label}
+                      className="w-24 h-24 object-contain drop-shadow-2xl select-none relative z-10 animate-pulse"
+                      onError={() => {
+                        setImageErrors(prev => ({
+                          ...prev,
+                          [tier.label.toLowerCase()]: true
+                        }));
+                      }}
+                    />
+                  )}
                 </motion.div>
 
                 {/* Tier name */}
@@ -404,15 +493,24 @@ const Dashboard = () => {
         {/* BANNER */}
         <motion.div
           variants={itemVariants}
-          className={`h-[300px] flex-shrink-0 relative clay-card overflow-hidden group transition-all duration-500`}
+          className="h-[300px] flex-shrink-0 relative clay-card overflow-hidden group transition-all duration-500"
         >
-          <img
-            src="https://images.unsplash.com/photo-1543332164-6e82f3553c46?auto=format&fit=crop&q=80&w=2000"
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-            alt="Wellness Banner"
-          />
+          <div className="absolute inset-0 z-0">
+            <AnimatePresence mode="popLayout">
+              <motion.img
+                key={bannerImages[currentImageIdx]}
+                src={bannerImages[currentImageIdx]}
+                initial={{ opacity: 0, scale: 1.05 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.5, ease: "easeInOut" }}
+                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
+                alt="Wellness Banner Slide"
+              />
+            </AnimatePresence>
+          </div>
 
-          <div className="absolute inset-0 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent"></div>
+          <div className="absolute inset-0 z-10 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent"></div>
 
           <div className="relative z-10 h-full flex flex-col justify-center px-12">
             <motion.span
@@ -454,7 +552,7 @@ const Dashboard = () => {
         {/* DAILY TRACKING */}
         <motion.div
           variants={itemVariants}
-          className={`${cardBg} p-10 clay-card flex flex-col overflow-hidden backdrop-blur-xl transition-all duration-500`}
+          className={`${cardBg} pt-8 pb-8 pl-8 pr-5 clay-card flex-1 flex flex-col overflow-hidden backdrop-blur-xl transition-all duration-500`}
         >
           <header className="flex justify-between items-end mb-8 relative">
             <div className="flex items-center gap-4">
@@ -504,7 +602,7 @@ const Dashboard = () => {
             </div>
           </header>
 
-          <div className={`flex-1 ${progressPercentage === 100 ? 'overflow-hidden' : 'overflow-y-auto'} pr-2 custom-scrollbar min-h-0`} style={{ scrollbarGutter: 'stable' }}>
+          <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
             {loadingDiet ? (
               <div className="h-full flex flex-col items-center justify-center opacity-40">
                 <Loader2 className="animate-spin mb-4" />
@@ -514,7 +612,7 @@ const Dashboard = () => {
                 </p>
               </div>
             ) : dailyDiet ? (
-              <div className="relative">
+              <div className="relative flex-1 min-h-0 overflow-hidden flex flex-col">
                 <AnimatePresence mode="wait">
                   {progressPercentage === 100 ? (
                     <motion.div
@@ -587,35 +685,26 @@ const Dashboard = () => {
                       initial={{ x: 0, opacity: 1 }}
                       exit={{ x: -800, opacity: 0, scale: 0.95 }}
                       transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
-                      className="grid grid-cols-3 gap-6"
+                      className="grid grid-cols-3 gap-6 h-full min-h-0 flex-1"
                     >
                       {['breakfast', 'lunch', 'dinner'].map((meal) => (
                         <div
                           key={meal}
-                          className={`relative p-8 clay-card transition-all duration-700 flex flex-col overflow-hidden ${
+                          className={`relative p-8 clay-card transition-all duration-700 flex flex-col overflow-hidden h-full min-h-0 ${
                             darkMode
                               ? 'bg-[#121212]'
                               : 'bg-[#fdfdfc]'
                           }`}
                         >
-                          <div className="flex justify-between items-center mb-8">
+                          <div className="flex justify-between items-center mb-8 flex-shrink-0">
                             <div className="flex items-center gap-3">
-                              <div
-                                className={`p-3 rounded-2xl border shadow-sm ${
-                                  darkMode
-                                    ? 'bg-white/5 border-white/10 text-[#8ecb84]'
-                                    : 'bg-white text-[#2d5a27]'
-                                }`}
-                              >
-                                <Utensils size={18} />
-                              </div>
-                              <span className={`text-[10px] font-black uppercase tracking-[0.3em] ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>
+                              <span className={`text-xs font-black uppercase tracking-[0.3em] ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>
                                 {meal}
                               </span>
                             </div>
                           </div>
 
-                          <div className="flex-1 space-y-6">
+                          <div className="flex-1 overflow-y-auto pr-1 space-y-6 custom-scrollbar min-h-0">
                             {dailyDiet[meal].map((item, idx) => {
                               const itemKey = `${meal}-${idx}`;
                               const isCompleted = completedItems[itemKey];
@@ -623,35 +712,39 @@ const Dashboard = () => {
                               return (
                                 <div 
                                   key={idx} 
-                                  className={`relative group p-4 rounded-2xl border transition-all duration-500 ${
+                                  style={{
+                                    backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.35) 20%, rgba(0,0,0,0.75) 90%), url('${getImageUrl(item.imageUrl || item.imageURL || item.image || item.imagePath)}')`,
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                  }}
+                                  className={`relative group p-6 rounded-2xl border transition-all duration-500 min-h-[220px] flex flex-col justify-end ${
                                     isCompleted 
-                                      ? 'border-[#8ecb84]/30 bg-[#8ecb84]/5' 
-                                      : 'border-transparent hover:border-white/10'
+                                      ? 'border-[#8ecb84]/40 shadow-lg' 
+                                      : 'border-white/10 hover:border-white/30 shadow-md'
                                   }`}
                                 >
-                                  <div className={`flex justify-between items-center transition-all duration-500 ${isCompleted ? 'opacity-30 grayscale' : 'opacity-100'}`}>
+                                  <div className={`flex justify-between items-end transition-all duration-500 ${isCompleted ? 'opacity-40' : 'opacity-100'}`}>
                                     <div className="flex-1 min-w-0 pr-4">
-                                      <p className={`text-sm font-bold truncate mb-1 ${textMain}`}>
+                                      <p className="text-base font-bold text-white mb-1 drop-shadow-md truncate">
                                         {item.name}
                                       </p>
-                                      <p className={`text-[10px] font-medium ${darkMode ? 'text-white/40' : 'text-gray-400'}`}>
+                                      <p className="text-[10px] font-semibold text-white/80 mb-2 drop-shadow-sm">
                                         {item.calories} kcal • {item.grams}g
                                       </p>
                                     </div>
 
                                     <button
-                                      onClick={() => toggleItem(meal, idx)}
-                                      disabled={isCompleted}
-                                      className={`p-2 rounded-xl transition-all ${
+                                      onClick={(e) => { e.stopPropagation(); toggleItem(meal, idx); }}
+                                      className={`p-3 rounded-xl transition-all border backdrop-blur-md shadow-sm flex-shrink-0 ${
                                         isCompleted 
-                                          ? 'text-[#8ecb84] cursor-default' 
-                                          : 'text-gray-300 hover:text-[#8ecb84] hover:bg-[#8ecb84]/10 active:scale-90'
+                                          ? 'text-[#8ecb84] border-[#8ecb84]/30 bg-[#8ecb84]/15 hover:bg-[#8ecb84]/25 hover:text-red-400 active:scale-90' 
+                                          : 'text-white/80 border-white/10 bg-black/40 hover:bg-black/60 hover:text-[#8ecb84] active:scale-90'
                                       }`}
                                     >
                                       {isCompleted ? (
-                                        <CheckCircle2 size={24} />
+                                        <CheckCircle2 size={20} />
                                       ) : (
-                                        <Circle size={24} />
+                                        <Circle size={20} />
                                       )}
                                     </button>
                                   </div>
@@ -688,6 +781,23 @@ const Dashboard = () => {
           </div>
         </motion.div>
       </motion.main>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: ${darkMode ? 'rgba(142, 203, 132, 0.3)' : 'rgba(45, 90, 39, 0.3)'};
+          border-radius: 9999px;
+          transition: all 0.2s ease;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: ${darkMode ? 'rgba(142, 203, 132, 0.5)' : 'rgba(45, 90, 39, 0.5)'};
+        }
+      ` }} />
     </motion.div>
   );
 };
