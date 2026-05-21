@@ -34,12 +34,31 @@ const getFoodDatabase = async (conditions) => {
 
 const findMostFrequentGoal = (gender, bmi) => {
     const category = getBmiCategory(bmi);
-    const filtered = communityData.filter(item => item.gender?.toLowerCase() === gender?.toLowerCase() && item.bmiCategory === category);
-    if (filtered.length === 0) return { goal: "maintain", category };
+    const filtered = communityData.filter(
+        item => item.gender?.toLowerCase() === gender?.toLowerCase() && item.bmiCategory === category
+    );
+    if (filtered.length === 0) return { goal: 'maintain', category, peerCount: 0 };
     const counts = {};
     filtered.forEach(item => { counts[item.goal] = (counts[item.goal] || 0) + 1; });
     const mostFrequent = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
-    return { goal: mostFrequent, category };
+    return { goal: mostFrequent, category, peerCount: filtered.length };
 };
 
-module.exports = { syncMLData, getFoodDatabase, findMostFrequentGoal };
+/** Live update after save/update health profile (KNN-style community memory). */
+const addToMemory = ({ gender, bmi, goal }) => {
+    communityData.push({
+        gender,
+        bmiCategory: getBmiCategory(bmi),
+        goal,
+    });
+};
+
+const getMemory = () => communityData;
+
+module.exports = {
+    syncMLData,
+    getFoodDatabase,
+    findMostFrequentGoal,
+    addToMemory,
+    getMemory,
+};

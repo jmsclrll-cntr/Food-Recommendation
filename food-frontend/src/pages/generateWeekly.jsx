@@ -38,6 +38,10 @@ const GenerateWeekly = () => {
   const [suggestion, setSuggestion] = useState("");
   const [weeklyPlan, setWeeklyPlan] = useState(null);
   const [dailyTarget, setDailyTarget] = useState(0);
+  const [dietRecommendation, setDietRecommendation] = useState(null);
+  const [calorieTolerance, setCalorieTolerance] = useState(0);
+  const [serverTdee, setServerTdee] = useState(0);
+  const [serverBmr, setServerBmr] = useState(0);
   const [modalError, setModalError] = useState("");
   const [swappingMeal, setSwappingMeal] = useState(null); 
   const [dbAlternatives, setDbAlternatives] = useState([]);
@@ -144,10 +148,18 @@ const GenerateWeekly = () => {
 
 
 
-  // Logic: AI Suggestion Sync
+  // AI: community goal + Decision Tree diet type
   useEffect(() => {
     if (bmi > 0 && formData.gender) {
-      axios.get(`http://localhost:5000/api/recommendations/suggest?gender=${formData.gender}&bmi=${bmi}`)
+      const params = new URLSearchParams({
+        gender: formData.gender,
+        bmi: String(bmi),
+        weight: String(formData.weight || ''),
+        height: String(formData.height || ''),
+        goal: formData.goal || '',
+        conditions: JSON.stringify(formData.conditions || []),
+      });
+      axios.get(`http://localhost:5000/api/recommendations/suggest?${params}`)
         .then(res => {
           let recGoal = res.data.goal?.toLowerCase() || 'maintain';
           if (recGoal.includes('lose') || recGoal.includes('loss')) recGoal = 'lose';
@@ -156,10 +168,19 @@ const GenerateWeekly = () => {
 
           setSuggestion(recGoal);
           setBmiStatus(res.data.category);
-          setFormData(prev => ({ ...prev, goal: recGoal }));
+          if (res.data.dietLabel) {
+            setDietRecommendation({
+              label: res.data.dietLabel,
+              tagalog: res.data.dietLabelTagalog,
+              type: res.data.dietType,
+            });
+          }
+          if (!formData.goal) {
+            setFormData(prev => ({ ...prev, goal: recGoal }));
+          }
         }).catch(() => console.log("Prediction sync error."));
     }
-  }, [bmi, formData.gender]);
+  }, [bmi, formData.gender, formData.weight, formData.height, formData.conditions]);
 
   // Logic: Fetch Plan
   const toggleCondition = (cond) => {
@@ -182,6 +203,16 @@ const GenerateWeekly = () => {
       if (planRes.data && planRes.data.plan) {
         setWeeklyPlan(planRes.data.plan);
         setDailyTarget(planRes.data.dailyTarget);
+        setCalorieTolerance(planRes.data.calorieTolerance || 0);
+        if (planRes.data.nutritionTargets) {
+          setServerBmr(planRes.data.nutritionTargets.bmr || 0);
+          setServerTdee(planRes.data.nutritionTargets.tdee || 0);
+          setDailyTarget(planRes.data.nutritionTargets.dailyTarget || planRes.data.dailyTarget);
+          setCalorieTolerance(planRes.data.nutritionTargets.tolerance || planRes.data.calorieTolerance || 0);
+        }
+        if (planRes.data.dietRecommendation) {
+          setDietRecommendation(planRes.data.dietRecommendation);
+        }
         setIsSyncing(false);
         setIsSubmitted(true);
       }
@@ -234,12 +265,27 @@ const GenerateWeekly = () => {
     setWeeklyPlan(updatedPlan);
   };
 
+  const buildAlternativesQuery = (mealType) => {
+    const targetCal = dailyTarget || recommendedCalories || 2000;
+    const ratios = { breakfast: 0.30, lunch: 0.40, dinner: 0.30 };
+    const mealCal = Math.round(targetCal * (ratios[mealType] || 0.33));
+    return new URLSearchParams({
+      type: mealType,
+      conditions: JSON.stringify(formData.conditions || []),
+      allergies: JSON.stringify(selectedAllergies),
+      weight: String(formData.weight || ''),
+      height: String(formData.height || ''),
+      goal: formData.goal || suggestion || 'maintain',
+      targetCalories: String(mealCal),
+    }).toString();
+  };
+
   const handleOpenSwap = async (item, day, mealType, idx) => {
     setModalError("");
     setSwappingMeal({ day, mealType, idx, original: item });
     setIsSyncing(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/recommendations/alternatives?type=${mealType}&condition=${formData.condition}&allergies=${encodeURIComponent(JSON.stringify(selectedAllergies))}`);
+      const res = await axios.get(`http://localhost:5000/api/recommendations/alternatives?${buildAlternativesQuery(mealType)}`);
       setDbAlternatives(res.data);
     } catch (err) { alert("Failed to fetch alternatives."); }
     finally { setIsSyncing(false); }
@@ -250,7 +296,7 @@ const GenerateWeekly = () => {
     setIsAddingTo({ day, mealType });
     setIsSyncing(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/recommendations/alternatives?type=${mealType}&condition=${formData.condition}&allergies=${encodeURIComponent(JSON.stringify(selectedAllergies))}`);
+      const res = await axios.get(`http://localhost:5000/api/recommendations/alternatives?${buildAlternativesQuery(mealType)}`);
       setDbAlternatives(res.data);
     } catch (err) { alert("Failed to fetch options."); }
     finally { setIsSyncing(false); }
@@ -387,7 +433,14 @@ const GenerateWeekly = () => {
       : ' No dietary restrictions applied.';
 
     const goalLabel = formData.goal || suggestion || 'maintain';
-    return `Based on your biometrics (Age: ${formData.age}, ${formData.gender}, ${formData.height}cm, ${formData.weight}kg), your body's baseline energy requirement (BMR) is ${calculatedBmr} kcal. Factoring in a ${act} lifestyle, your daily burn (TDEE) is approx ${calculatedTdee} kcal. To successfully ${goalLabel.toUpperCase()} weight, we recommend a target intake of ${recommendedCalories || dailyTarget || calculatedTdee} kcal.${conditionText}${allergyText} Your BMI of ${bmi} (${bmiStatus || 'Normal'}) is factored into these nutritional optimizations.`;
+    const dietText = dietRecommendation?.tagalog || dietRecommendation?.label
+      ? ` Ang ML Decision Tree ay nagrekomenda ng ${dietRecommendation.tagalog || dietRecommendation.label}.`
+      : '';
+    const displayBmr = serverBmr || calculatedBmr;
+    const displayTdee = serverTdee || calculatedTdee;
+    const displayTarget = dailyTarget || recommendedCalories || displayTdee;
+    const tol = calorieTolerance || 40;
+    return `Based on your biometrics (Age: ${formData.age}, ${formData.gender}, ${formData.height}cm, ${formData.weight}kg), your BMR is ${displayBmr} kcal and TDEE is ${displayTdee} kcal (${act}). Your daily intake target for ${goalLabel.toUpperCase()} is ${displayTarget} kcal (within ±${tol} kcal per day).${dietText}${conditionText}${allergyText} BMI ${bmi} (${bmiStatus || 'Normal'}). Meals are picked with KNN + calorie optimizer to stay near this target.`;
   };
 
   if (loading) return <div className={`h-screen flex items-center justify-center ${bgMain}`}><Loader2 className="animate-spin text-[#4a8a43] dark:text-[#6bcf5f]" /></div>;
@@ -494,7 +547,7 @@ const GenerateWeekly = () => {
                 <div ref={allergyContainerRef} className="space-y-4 pt-4 border-t border-white/5 relative">
                   <div className="flex items-center justify-between">
                     <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Allergies & Excluded Ingredients</label>
-                    <span className="text-[8px] font-bold uppercase px-2 py-0.5 bg-[#2d5a27]/10 dark:bg-[#5cb351]/10 text-[#2d5a27] dark:text-[#5cb351] rounded-full">KNN Filter</span>
+                    <span className="text-[8px] font-bold uppercase px-2 py-0.5 bg-[#2d5a27]/10 dark:bg-[#5cb351]/10 text-[#2d5a27] dark:text-[#5cb351] rounded-full">Allergen Filter</span>
                   </div>
                   
                   {/* Allergy Search Input & Dropdown container */}
@@ -707,18 +760,29 @@ const GenerateWeekly = () => {
                         <div>
                           <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Intake Total</p>
                           <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{weeklyPlan[DYNAMIC_DAYS[activeDayIdx]].dailyTotal} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
+                          {weeklyPlan[DYNAMIC_DAYS[activeDayIdx]].onTarget === false && (
+                            <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 mt-1">
+                              {weeklyPlan[DYNAMIC_DAYS[activeDayIdx]].calorieGap || 0} kcal below target
+                            </p>
+                          )}
+                          {weeklyPlan[DYNAMIC_DAYS[activeDayIdx]].onTarget === true && (
+                            <p className="text-[9px] font-bold text-[#2d5a27] dark:text-[#5cb351] mt-1">On target</p>
+                          )}
                         </div>
-                        {calculatedBmr > 0 && (
+                        {(serverBmr || calculatedBmr) > 0 && (
                           <div className="pl-8 border-l border-white/5">
-                            <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Computed BMR</p>
-                            <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{calculatedBmr} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
+                            <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>BMR</p>
+                            <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{serverBmr || calculatedBmr} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
                           </div>
                         )}
 
-                        {(dailyTarget > 0 || recommendedCalories > 0) && (
+                        {dailyTarget > 0 && (
                           <div className="pl-8 border-l border-white/5">
-                            <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Target Goal</p>
-                            <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{dailyTarget || recommendedCalories} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
+                            <p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Daily Target</p>
+                            <p className={`text-xl font-serif italic ${darkMode ? 'text-[#5cb351]' : 'text-[#2d5a27]'}`}>{dailyTarget} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
+                            {calorieTolerance > 0 && (
+                              <p className={`text-[9px] ${textSub} mt-1`}>±{calorieTolerance} kcal</p>
+                            )}
                           </div>
                         )}
                       </div>
