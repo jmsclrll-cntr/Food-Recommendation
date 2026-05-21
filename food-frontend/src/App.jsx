@@ -6,6 +6,8 @@ import Dashboard from './pages/dashboard';
 import GenerateWeekly from './pages/generateWeekly.jsx';
 import Profile from './pages/Profile.jsx';
 import ViewWeekly from './pages/viewWeekly.jsx';
+import ViewHistory from './pages/viewHistory.jsx';
+import Achievements from './pages/achievements.jsx';
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -18,6 +20,8 @@ function AnimatedRoutes() {
         <Route path="/generate-weekly" element={<GenerateWeekly />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/view-weekly" element={<ViewWeekly />} />
+        <Route path="/view-history" element={<ViewHistory />} />
+        <Route path="/achievements" element={<Achievements />} />
       </Routes>
     </AnimatePresence>
   );

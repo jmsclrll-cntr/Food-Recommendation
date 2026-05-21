@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ArrowLeft, Calendar, Utensils, Zap, Loader2, Info, 
-    ChevronRight, ChevronLeft, Sun, Moon, CheckCircle2
+    ChevronRight, ChevronLeft, Sun, Moon, CheckCircle2, Trash2
 } from 'lucide-react';
 import axios from 'axios';
 import MissionCompleteSticker from '../components/MissionCompleteSticker';
@@ -143,15 +143,27 @@ const ViewWeekly = () => {
                         <Calendar className={accentText} size={20} />
                     </div>
 
-                    {/* Dark Mode Toggle */}
-                    <button
-                        onClick={toggleDarkMode}
-                        className={`p-3 rounded-xl backdrop-blur-md transition-all ${
-                            darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/10 text-[#1c3a1c] hover:bg-black/5'
-                        }`}
-                    >
-                        {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Delete Plan */}
+                        <button
+                            className={`p-3 rounded-xl backdrop-blur-md transition-all ${
+                                darkMode ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
+                            }`}
+                            title="Delete Weekly Plan"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+
+                        {/* Dark Mode Toggle */}
+                        <button
+                            onClick={toggleDarkMode}
+                            className={`p-3 rounded-xl backdrop-blur-md transition-all ${
+                                darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/10 text-[#1c3a1c] hover:bg-black/5'
+                            }`}
+                        >
+                            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -236,24 +248,6 @@ const ViewWeekly = () => {
                                     </div>
                                 </div>
                             ))}
-                        </div>
-                    </div>
-                    
-                    {/* Nutritional Footer */}
-                    <div className="p-8 bg-[#1c3a1c] text-white flex justify-between items-center">
-                        <div className="flex items-center gap-8">
-                            <div className="flex items-center gap-3">
-                                <Info size={16} className="text-[#8ecb84]" />
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6a9966]">Daily Summary</p>
-                            </div>
-                            <div className="h-4 w-px bg-white/10"></div>
-                            <p className="text-2xl font-serif italic">
-                                Total Intake: <span className="text-[#8ecb84]">{currentDayPlan?.dailyTotal || 0}</span> <span className="text-xs not-italic font-sans font-bold opacity-40 uppercase tracking-widest">Calories</span>
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-2 px-6 py-2 bg-white/10 rounded-full border border-white/5">
-                            <div className="w-2 h-2 rounded-full bg-[#8ecb84] animate-pulse"></div>
-                            <span className="text-[9px] font-black uppercase tracking-widest">Active Protocol Day 0{activeDayIdx+1}</span>
                         </div>
                     </div>
                 </div>

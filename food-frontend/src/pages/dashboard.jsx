@@ -2,12 +2,17 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  LogOut, User, Droplets, ArrowRight, CheckCircle2, Circle, Loader2, Utensils, Eye, Moon, Sun, Trophy, PartyPopper
+  LogOut, User, Droplets, ArrowRight, CheckCircle2, Circle, Loader2, Utensils, Eye, Moon, Sun, Trophy, PartyPopper, History
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { getThemeStyles } from '../theme/styles';
+import bronzeImg from '../achievements/bronze.png';
+import silverImg from '../achievements/silver.png';
+import goldImg from '../achievements/gold.png';
+import platinumImg from '../achievements/platinum.png';
+import diamondImg from '../achievements/diamond.png';
 
 // Animation Variants
 const containerVariants = {
@@ -347,11 +352,11 @@ const Dashboard = () => {
         {(() => {
           // Determine the tier based on multiples of 7 days
           const tier =
-            completedDays >= 28 ? { label: 'Legendary',   sub: 'Unstoppable!', color: '#f5c842', glow: 'rgba(245,200,66,0.25)',  icon: '🏆', image: 'legendary.png' } :
-            completedDays >= 21 ? { label: 'Champion',    sub: 'You\'re on fire!', color: '#8ecb84', glow: 'rgba(142,203,132,0.22)', icon: '🥇', image: 'champion.png' } :
-            completedDays >= 14 ? { label: 'Dedicated',   sub: 'Solid consistency!', color: '#6ab8ff', glow: 'rgba(106,184,255,0.18)', icon: '🥈', image: 'dedicated.png' } :
-            completedDays >= 7  ? { label: 'Consistent',  sub: 'Building momentum!', color: '#a8d8ea', glow: 'rgba(168,216,234,0.15)', icon: '🥉', image: 'consistent.png' } :
-                                  { label: 'Beginner',    sub: 'Keep going!', color: '#8ecb84', glow: 'rgba(142,203,132,0.1)',  icon: '💧', image: 'beginner.png' };
+            completedDays >= 28 ? { label: 'Legendary',   sub: 'Unstoppable!', color: '#f5c842', glow: 'rgba(245,200,66,0.25)',  icon: '🏆', image: diamondImg } :
+            completedDays >= 21 ? { label: 'Champion',    sub: 'You\'re on fire!', color: '#8ecb84', glow: 'rgba(142,203,132,0.22)', icon: '🥇', image: platinumImg } :
+            completedDays >= 14 ? { label: 'Dedicated',   sub: 'Solid consistency!', color: '#6ab8ff', glow: 'rgba(106,184,255,0.18)', icon: '🥈', image: goldImg } :
+            completedDays >= 7  ? { label: 'Consistent',  sub: 'Building momentum!', color: '#a8d8ea', glow: 'rgba(168,216,234,0.15)', icon: '🥉', image: silverImg } :
+                                  { label: 'Beginner',    sub: 'Keep going!', color: '#8ecb84', glow: 'rgba(142,203,132,0.1)',  icon: '💧', image: bronzeImg };
 
           // Calculate progress within the current 7-day cycle
           const currentCycleProgress = completedDays % 7 === 0 && completedDays > 0 ? 7 : completedDays % 7;
@@ -359,8 +364,10 @@ const Dashboard = () => {
 
           return (
             <motion.div
+              onClick={() => navigate('/achievements')}
               variants={itemVariants}
-              className={`p-8 clay-card flex-1 flex flex-col justify-between relative overflow-hidden transition-all duration-500 ${
+              whileHover={{ scale: 1.02 }}
+              className={`p-8 clay-card flex-1 flex flex-col justify-between relative overflow-hidden transition-all duration-500 cursor-pointer group hover:ring-2 hover:ring-[#8ecb84]/50 hover:shadow-[0_0_40px_rgba(142,203,132,0.2)] ${
                 darkMode ? 'bg-[#121212] text-white' : 'bg-[#1c3a1c] text-[#e8f4e5]'
               }`}
             >
@@ -373,11 +380,17 @@ const Dashboard = () => {
               />
 
               {/* Header */}
-              <div className="relative z-10 flex items-center gap-2 mb-2">
-                <Trophy size={13} className="text-[#8ecb84]" />
-                <span className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#6a9966]">
-                  Diet Achievement
-                </span>
+              <div className="relative z-10 flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    <Trophy size={13} className="text-[#8ecb84]" />
+                    <span className="text-[9px] font-bold tracking-[0.3em] uppercase text-[#6a9966]">
+                    Diet Achievement
+                    </span>
+                </div>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[#8ecb84] translate-x-4 group-hover:translate-x-0 duration-300">
+                    <span className="text-[8px] font-bold uppercase tracking-widest">View Room</span>
+                    <ArrowRight size={12} />
+                </div>
               </div>
 
               {/* Central display */}
@@ -388,21 +401,21 @@ const Dashboard = () => {
                   initial={{ scale: 0.6, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: 'spring', stiffness: 220, damping: 16 }}
-                  className="relative flex items-center justify-center min-h-[96px]"
+                  className="relative flex items-center justify-center min-h-[380px] my-6"
                 >
                   <motion.div
-                    animate={{ scale: [1, 1.18, 1], opacity: [0.3, 0.55, 0.3] }}
+                    animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.55, 0.3] }}
                     transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
-                    className="absolute w-24 h-24 rounded-full"
+                    className="absolute w-[420px] h-[420px] rounded-full"
                     style={{ background: `radial-gradient(circle, ${tier.glow} 0%, transparent 70%)` }}
                   />
                   {imageErrors[tier.label.toLowerCase()] ? (
-                    <span className="text-7xl drop-shadow-2xl select-none">{tier.icon}</span>
+                    <span className="text-9xl drop-shadow-2xl select-none group-hover:scale-110 transition-transform duration-500">{tier.icon}</span>
                   ) : (
                     <img
-                      src={`/trophies/${tier.image}`}
+                      src={tier.image}
                       alt={tier.label}
-                      className="w-24 h-24 object-contain drop-shadow-2xl select-none relative z-10 animate-pulse"
+                      className="w-[360px] h-[360px] object-contain drop-shadow-2xl select-none relative z-10 animate-pulse group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500"
                       onError={() => {
                         setImageErrors(prev => ({
                           ...prev,
@@ -421,62 +434,13 @@ const Dashboard = () => {
                   transition={{ delay: 0.1 }}
                   className="text-center"
                 >
-                  <p className="font-serif text-2xl italic mb-0.5" style={{ color: tier.color }}>
+                  <p className="font-serif text-3xl italic" style={{ color: tier.color }}>
                     {tier.label}
-                  </p>
-                  <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#6a9966] opacity-70">
-                    {tier.sub}
                   </p>
                 </motion.div>
 
-                {/* Days counter */}
-                <p className="text-[10px] font-black tracking-widest text-[#8ecb84] opacity-80 tabular-nums">
-                  {completedDays} Total Days
-                </p>
-
-                {/* Day pip indicators for current cycle */}
-                <div className="flex gap-2">
-                  {Array.from({ length: 7 }).map((_, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ delay: i * 0.05, type: 'spring', stiffness: 300 }}
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{
-                        background: i < currentCycleProgress ? tier.color : 'rgba(255,255,255,0.12)',
-                        boxShadow: i < currentCycleProgress ? `0 0 6px ${tier.color}80` : 'none'
-                      }}
-                    />
-                  ))}
-                </div>
-
-                {/* Thin progress bar */}
-                <div className="w-full bg-white/10 h-1 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(currentCycleProgress / 7) * 100}%` }}
-                    transition={{ duration: 1, ease: 'easeOut' }}
-                    className="h-full rounded-full"
-                    style={{ background: tier.color }}
-                  />
-                </div>
-
-                <p className="text-[8px] font-bold uppercase tracking-widest text-[#6a9966] opacity-40">
-                  {toGo === 0 ? 'Cycle complete!' : `${toGo} day${toGo !== 1 ? 's' : ''} to next tier`}
-                </p>
               </div>
 
-              {/* Sign Out */}
-              <button
-                onClick={() => { localStorage.clear(); navigate('/'); }}
-                className={`relative z-10 w-full py-4 clay-btn text-[9px] font-bold uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-2 ${
-                  darkMode ? 'text-white/70 hover:bg-white/5 hover:text-white' : 'text-[#6a9966] hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <LogOut size={12} />
-                Sign Out
-              </button>
             </motion.div>
           );
         })()}
@@ -510,9 +474,9 @@ const Dashboard = () => {
             </AnimatePresence>
           </div>
 
-          <div className="absolute inset-0 z-10 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent"></div>
+          <div className="absolute inset-0 z-10 bg-gradient-to-r from-[#1c3a1c]/90 via-[#1c3a1c]/40 to-transparent pointer-events-none"></div>
 
-          <div className="relative z-10 h-full flex flex-col justify-center px-12">
+          <div className="relative z-20 h-full flex flex-col justify-center px-12">
             <motion.span
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -544,6 +508,16 @@ const Dashboard = () => {
               >
                 View Weekly Diet Plan
                 <Eye size={14} className="text-[#8ecb84]" />
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleNav('/view-history')}
+                className="w-fit bg-white/10 backdrop-blur-md text-white px-8 py-4 text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-white/20 transition-all flex items-center gap-3 clay-btn"
+              >
+                Diet History
+                <History size={14} className="text-[#8ecb84]" />
               </motion.button>
             </div>
           </div>
@@ -648,36 +622,16 @@ const Dashboard = () => {
                           <PartyPopper size={32} />
                         </motion.div>
                       </div>
-
-                      <motion.h3 
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.2 }}
-                        className={`font-serif text-6xl italic mb-6 ${textMain} leading-tight`}
-                      >
-                        Daily Protocol <br /> Achieved
-                      </motion.h3>
                       
                       <motion.p 
                         initial={{ y: 20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.3 }}
-                        className={`text-base max-w-lg mx-auto mb-12 leading-relaxed opacity-80 ${textSub}`}
+                        className={`text-base max-w-lg mx-auto leading-relaxed opacity-80 ${textSub}`}
                       >
                         You have successfully completed every element of your nutrition plan for today. 
                         Your dedication to organic wellness is paving the way for superior cellular repair.
                       </motion.p>
-
-                      <motion.button
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.4 }}
-                        onClick={() => handleNav('/view-weekly')}
-                        className="bg-[#2d5a27] text-white px-12 py-5 text-[11px] font-black uppercase tracking-[0.5em] hover:bg-[#1c3a1c] hover:scale-105 active:scale-95 transition-all group clay-btn"
-                      >
-                        Review Weekly Performance
-                        <ArrowRight size={14} className="inline-block ml-3 group-hover:translate-x-1 transition-transform" />
-                      </motion.button>
                     </motion.div>
                   ) : (
                     <motion.div

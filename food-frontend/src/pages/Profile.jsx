@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Mail, ShieldCheck, Calendar, Weight, Ruler, Activity, Moon, Sun, Edit2
+  ArrowLeft, Mail, ShieldCheck, Calendar, Weight, Ruler, Activity, Moon, Sun, Edit2, LogOut
 } from 'lucide-react';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { getThemeStyles } from '../theme/styles';
@@ -125,8 +125,17 @@ const Profile = () => {
               </div>
             </div>
 
-            <button className="w-full bg-[#1c3a1c] text-white py-4 text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-[#2d5a27] transition-all active:scale-[0.98] clay-btn">
+            <button className="w-full bg-[#1c3a1c] text-white py-4 text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-[#2d5a27] transition-all active:scale-[0.98] clay-btn mb-4">
               Edit Detailed Profile
+            </button>
+            <button 
+              onClick={() => { localStorage.clear(); navigate('/'); }}
+              className={`w-full py-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all active:scale-[0.98] clay-btn flex justify-center items-center gap-2 ${
+                darkMode ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-50 text-red-700 hover:bg-red-100'
+              }`}
+            >
+              <LogOut size={14} />
+              Sign Out
             </button>
           </motion.div>
 
