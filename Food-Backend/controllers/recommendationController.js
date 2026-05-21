@@ -1,8 +1,7 @@
 const { findMostFrequentGoal, getFoodDatabase } = require('../ml/mlDataService');
-const { recommendFoodKNN } = require('../ml/knnmodel');
 const { extractUniqueIngredients, sequentialSearch } = require('../utils/searchAlgorithms');
-const { calculateBmr, calculateTdee, calculateTargetCalories } = require('../ml/utils');
-const { pickDailyMealsOptimized } = require('../utils/combinationOptimizer');
+const { calculateTargetCalories } = require('../ml/utils');
+const { pickWeeklyMealsOptimized } = require('../utils/combinationOptimizer');
 
 let cachedIngredients = null;
 
@@ -101,8 +100,7 @@ exports.getWeeklySuggestion = async (req, res) => {
         const condArray = conditions || (condition ? [condition] : []);
 
         const activeActivity = activity || 'moderate';
-        const bmr = calculateBmr(weight, height, age, gender);
-        const tdee = calculateTargetCalories(0, gender, goal, weight, height, age, activeActivity);
+        const dailyTargetCalories = calculateTargetCalories(0, gender, goal, weight, height, age, activeActivity);
 
         let foodPool = await getFoodDatabase(condArray);
 
@@ -136,20 +134,18 @@ exports.getWeeklySuggestion = async (req, res) => {
         }
 
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-        let weeklyPlan = {};
-        let usedFoodIds = {}; // { foodId: timesUsedThisWeek } — allows controlled repeats for small databases
 
-        // Pre-filter pools once to save time
         const bPool = foodPool.filter(f => f.type?.toLowerCase() === 'breakfast');
         const lPool = foodPool.filter(f => f.type?.toLowerCase() === 'lunch');
         const dPool = foodPool.filter(f => f.type?.toLowerCase() === 'dinner');
 
-        days.forEach((day) => {
-            const result = pickDailyMealsOptimized(bPool, lPool, dPool, tdee, usedFoodIds);
-            weeklyPlan[day] = result;
+        const dayResults = pickWeeklyMealsOptimized(bPool, lPool, dPool, dailyTargetCalories, days.length);
+        const weeklyPlan = {};
+        days.forEach((day, i) => {
+            weeklyPlan[day] = dayResults[i];
         });
 
-        res.status(200).json({ plan: weeklyPlan, dailyTarget: Math.round(tdee) });
+        res.status(200).json({ plan: weeklyPlan, dailyTarget: Math.round(dailyTargetCalories) });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

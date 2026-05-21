@@ -1,32 +1,73 @@
 // utils/combinationOptimizer.js
 //
-// Meal Combination Optimizer — Branch-and-Bound Subset-Sum
-//
-// RULES:
-//  1. Daily total MUST be <= dailyTarget (hard ceiling — never go over)
-//  2. Daily total SHOULD be >= dailyTarget - 20 kcal (soft floor)
-//  3. No food appears TWICE in the same day (intra-day uniqueness — always enforced)
-//  4. Inter-day repeats: limited by pool size for variety, but gap-fill
-//     ignores the weekly repeat cap so the system never gets stuck on day 5+
+// Priority: daily total as close as possible to dailyTarget.
+// Repeating the same meal across days is allowed.
+// Same food never appears twice in one day.
 
-const { recommendFoodKNN } = require('../ml/knnmodel');
+const MAX_ITEMS_PER_SLOT = 6;
+const NEAR_TARGET_GAP = 20;
+const MAX_POOL_FOR_SEARCH = 22;
 
-// ── Configuration ────────────────────────────────────────────
-const MAX_ITEMS_PER_SLOT = 4;     // Max food items per meal
-const NEAR_TARGET_GAP    = 20;    // Acceptable undershoot in kcal
-const CANDIDATE_SIZE     = 18;    // Pool size fed into Branch-and-Bound per slot
 const MEAL_RATIOS = { breakfast: 0.30, lunch: 0.40, dinner: 0.30 };
 
-// ─────────────────────────────────────────────────────────────
-// optimizeSlot
-//
-// Branch-and-Bound that picks the subset of `eligible` foods
-// whose total is as close to `budget` as possible WITHOUT
-// exceeding it.  `dayUsedIds` enforces intra-day uniqueness.
-// ─────────────────────────────────────────────────────────────
+function validFoods(pool) {
+    return pool.filter(f => f.id && (f.grams || 0) > 0 && (f.calories || 0) > 0);
+}
+
+function dayTotal(slots) {
+    return slots.reduce(
+        (s, sl) => s + sl.meal.reduce((ss, f) => ss + (f.calories || 0), 0),
+        0
+    );
+}
+
+/** Keep the most useful items for search (diverse calorie sizes). */
+function trimPoolForSearch(pool, dailyTarget, mealShare) {
+    const items = validFoods(pool);
+    if (items.length <= MAX_POOL_FOR_SEARCH) return items;
+
+    const budget = dailyTarget * mealShare;
+    const seen = new Set();
+    const out = [];
+
+    const add = (list) => list.forEach(f => {
+        if (!seen.has(f.id)) { seen.add(f.id); out.push(f); }
+    });
+
+    add([...items].sort((a, b) => Math.abs((a.calories || 0) - budget) - Math.abs((b.calories || 0) - budget)).slice(0, 8));
+    add([...items].sort((a, b) => (b.calories || 0) - (a.calories || 0)).slice(0, 6));
+    add([...items].filter(f => (f.calories || 0) <= 150).sort((a, b) => (b.calories || 0) - (a.calories || 0)).slice(0, 8));
+
+    return out.slice(0, MAX_POOL_FOR_SEARCH);
+}
+
+/** All non-empty subsets up to maxItems that fit in maxCal. */
+function generateSubsets(pool, maxItems, maxCal, excludeIds) {
+    const items = pool.filter(f => !excludeIds.has(f.id));
+    const results = [];
+
+    function backtrack(start, pick, total) {
+        if (pick.length > 0) results.push({ items: [...pick], total });
+
+        if (pick.length >= maxItems) return;
+
+        for (let i = start; i < items.length; i++) {
+            const cal = items[i].calories || 0;
+            if (total + cal > maxCal) continue;
+            pick.push(items[i]);
+            backtrack(i + 1, pick, total + cal);
+            pick.pop();
+        }
+    }
+
+    backtrack(0, [], 0);
+    return results;
+}
+
+// ── Branch-and-bound for one meal slot ───────────────────────
 function optimizeSlot(eligible, budget, dayUsedIds) {
     const pool = eligible.filter(
-        f => f.id && !dayUsedIds.has(f.id) && (f.calories || 0) > 0 && (f.calories || 0) <= budget
+        f => !dayUsedIds.has(f.id) && (f.calories || 0) > 0 && (f.calories || 0) <= budget
     );
     if (pool.length === 0) return [];
 
@@ -51,189 +92,213 @@ function optimizeSlot(eligible, budget, dayUsedIds) {
 
     branch(0, [], 0);
 
-    // Fallback: pick the single largest item that fits under budget
     if (best.length === 0) {
-        const fit = [...pool].sort((a, b) => (b.calories || 0) - (a.calories || 0));
+        const fit = [...pool].sort(
+            (a, b) => Math.abs(budget - (a.calories || 0)) - Math.abs(budget - (b.calories || 0))
+        );
         if (fit.length > 0) best = [fit[0]];
     }
 
     return best;
 }
 
-// ─────────────────────────────────────────────────────────────
-// getCandidates
-//
-// Builds a diverse candidate list for a slot.
-// Three tiers ensure B&B has everything it needs:
-//   Tier 1 – items closest to budget    (anchor dishes)
-//   Tier 2 – items ≤ 70% of budget     (pairing companions)
-//   Tier 3 – items ≤ 120 kcal          (tiny top-off sides)
-//
-// allowReused: if true, ignore the weekly frequency cap
-//   (used during gap-fill so day 5-7 never run out of foods)
-// ─────────────────────────────────────────────────────────────
-function getCandidates(pool, budget, dayUsedIds, usedFoodIds, maxWeeklyRepeats, allowReused) {
-    const avail = pool.filter(f => {
-        if (!f.id || (f.grams || 0) <= 0 || (f.calories || 0) <= 0) return false;
-        if (dayUsedIds.has(f.id)) return false;                            // intra-day: always block
-        if (!allowReused && (usedFoodIds[f.id] || 0) >= maxWeeklyRepeats) return false; // inter-day cap
-        return true;
-    });
+// ── Exhaustive day search (breakfast × lunch × dinner subsets) ──
+function searchNearestDay(bPool, lPool, dPool, dailyTarget) {
+    const bItems = trimPoolForSearch(bPool, dailyTarget, MEAL_RATIOS.breakfast);
+    const lItems = trimPoolForSearch(lPool, dailyTarget, MEAL_RATIOS.lunch);
+    const dItems = trimPoolForSearch(dPool, dailyTarget, MEAL_RATIOS.dinner);
 
-    if (avail.length === 0) return [];
+    let best = null;
 
-    const seen = new Set();
-    const out  = [];
-    const add  = (list) => list.forEach(f => { if (!seen.has(f.id)) { seen.add(f.id); out.push(f); } });
+    const bSubs = generateSubsets(bItems, MAX_ITEMS_PER_SLOT, dailyTarget, new Set())
+        .filter(s => s.items.length > 0);
 
-    // Tier 1: closest to budget
-    add([...avail]
-        .sort((a, b) => Math.abs((a.calories || 0) - budget) - Math.abs((b.calories || 0) - budget))
-        .slice(0, 7));
+    for (const b of bSubs) {
+        const used = new Set(b.items.map(f => f.id));
 
-    // Tier 2: medium companions
-    add([...avail]
-        .filter(f => (f.calories || 0) <= budget * 0.70)
-        .sort((a, b) => (b.calories || 0) - (a.calories || 0))
-        .slice(0, 7));
+        const lSubs = generateSubsets(lItems, MAX_ITEMS_PER_SLOT, dailyTarget - b.total, used)
+            .filter(s => s.items.length > 0);
 
-    // Tier 3: tiny top-offs
-    add([...avail]
-        .filter(f => (f.calories || 0) <= 120)
-        .sort((a, b) => (b.calories || 0) - (a.calories || 0))
-        .slice(0, 4));
+        for (const l of lSubs) {
+            l.items.forEach(f => used.add(f.id));
+            const afterLunch = dailyTarget - b.total - l.total;
 
-    // Shuffle for day-to-day variety
-    for (let i = out.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [out[i], out[j]] = [out[j], out[i]];
-    }
+            const dSubs = generateSubsets(dItems, MAX_ITEMS_PER_SLOT, afterLunch, used)
+                .filter(s => s.items.length > 0);
 
-    return out.slice(0, CANDIDATE_SIZE);
-}
+            for (const d of dSubs) {
+                const total = b.total + l.total + d.total;
+                const gap = dailyTarget - total;
+                if (gap < 0) continue;
 
-// ─────────────────────────────────────────────────────────────
-// commit  — add picked foods to tracking sets
-// ─────────────────────────────────────────────────────────────
-function commit(foods, dayUsedIds, usedFoodIds) {
-    foods.forEach(f => {
-        dayUsedIds.add(f.id);
-        usedFoodIds[f.id] = (usedFoodIds[f.id] || 0) + 1;
-    });
-}
+                if (!best || gap < best.gap || (gap === best.gap && total > best.dailyTotal)) {
+                    best = {
+                        breakfast: b.items,
+                        lunch: l.items,
+                        dinner: d.items,
+                        dailyTotal: Math.round(total),
+                        gap,
+                    };
+                }
+            }
 
-// ─────────────────────────────────────────────────────────────
-// multiPassGapFill
-//
-// After initial slot optimisation, if the daily total is still
-// more than NEAR_TARGET_GAP kcal below target, keep adding
-// single foods (up to MAX_ITEMS_PER_SLOT per slot) until the
-// gap is closed or nothing more fits.
-//
-// This pass ALLOWS foods used on other days (allowReused=true)
-// so that a small database never gets completely stuck.
-// It still BLOCKS foods already in today's meals.
-// ─────────────────────────────────────────────────────────────
-function multiPassGapFill(slots, dailyTarget, dayUsedIds, usedFoodIds) {
-    for (let pass = 0; pass < 10; pass++) {
-        const currentTotal = slots.reduce((s, sl) =>
-            s + sl.meal.reduce((ss, f) => ss + (f.calories || 0), 0), 0);
-        const gap = dailyTarget - currentTotal;
-        if (gap <= NEAR_TARGET_GAP) break;
-
-        let added = false;
-
-        for (const { meal, pool, budget } of slots) {
-            if (meal.length >= MAX_ITEMS_PER_SLOT) continue;
-
-            const slotTotal  = meal.reduce((s, f) => s + (f.calories || 0), 0);
-            const headroom   = budget - slotTotal;
-            if (headroom <= 0) continue;
-
-            // Find the best single item that fits within headroom
-            // allowReused=true: cross-day reuse permitted to close the gap
-            const candidates = pool
-                .filter(f =>
-                    f.id &&
-                    (f.grams || 0) > 0 &&
-                    !dayUsedIds.has(f.id) &&             // intra-day uniqueness
-                    (f.calories || 0) > 0 &&
-                    (f.calories || 0) <= headroom
-                )
-                .sort((a, b) => (b.calories || 0) - (a.calories || 0)); // pick largest that fits
-
-            if (candidates.length === 0) continue;
-
-            const pick = candidates[0];
-            meal.push(pick);
-            dayUsedIds.add(pick.id);
-            usedFoodIds[pick.id] = (usedFoodIds[pick.id] || 0) + 1;
-            added = true;
-            break; // recalculate gap on next pass
+            l.items.forEach(f => used.delete(f.id));
         }
-
-        if (!added) break;
     }
+
+    return best;
 }
 
-// ─────────────────────────────────────────────────────────────
-// pickDailyMealsOptimized  (public — called by controller)
-//
-// usedFoodIds: plain object { foodId: timesUsedThisWeek }
-//   passed in from controller (NOT a Set).
-//
-// Dynamic weekly repeat cap based on pool size:
-//   < 10 foods  → allow 5 repeats
-//   < 20 foods  → allow 3 repeats
-//   ≥ 20 foods  → allow 1 (fresh each day preferred)
-// ─────────────────────────────────────────────────────────────
-function pickDailyMealsOptimized(bPool, lPool, dPool, dailyTarget, usedFoodIds) {
-    const bBudget = Math.round(dailyTarget * MEAL_RATIOS.breakfast);
-    const lBudget = Math.round(dailyTarget * MEAL_RATIOS.lunch);
-    const dBudget = Math.round(dailyTarget * MEAL_RATIOS.dinner);
+// ── Greedy day builder using full pools (no weekly repeat limit) ──
+function buildDayGreedy(bPool, lPool, dPool, dailyTarget, ratios) {
+    const bBudget = Math.round(dailyTarget * ratios.breakfast);
+    const lBudget = Math.round(dailyTarget * ratios.lunch);
+    const dBudget = dailyTarget - bBudget - lBudget;
+    const dayUsedIds = new Set();
 
-    const cap = (pool) => pool.length < 10 ? 5 : pool.length < 20 ? 3 : 1;
-    const maxB = cap(bPool);
-    const maxL = cap(lPool);
-    const maxD = cap(dPool);
+    const breakfast = optimizeSlot(validFoods(bPool), bBudget, dayUsedIds);
+    breakfast.forEach(f => dayUsedIds.add(f.id));
 
-    const dayUsedIds = new Set(); // reset every day — intra-day uniqueness only
+    const lunch = optimizeSlot(validFoods(lPool), lBudget, dayUsedIds);
+    lunch.forEach(f => dayUsedIds.add(f.id));
 
-    // ── Step 1: Initial slot optimisation (prefer fresh/less-used foods) ──
+    const dinner = optimizeSlot(validFoods(dPool), dBudget, dayUsedIds);
+    dinner.forEach(f => dayUsedIds.add(f.id));
 
-    const bCandidates = getCandidates(bPool, bBudget, dayUsedIds, usedFoodIds, maxB, false);
-    const breakfast   = optimizeSlot(bCandidates, bBudget, dayUsedIds);
-    commit(breakfast, dayUsedIds, usedFoodIds);
+    const slots = [
+        { meal: breakfast, pool: validFoods(bPool) },
+        { meal: lunch, pool: validFoods(lPool) },
+        { meal: dinner, pool: validFoods(dPool) },
+    ];
 
-    const lCandidates = getCandidates(lPool, lBudget, dayUsedIds, usedFoodIds, maxL, false);
-    const lunch       = optimizeSlot(lCandidates, lBudget, dayUsedIds);
-    commit(lunch, dayUsedIds, usedFoodIds);
+    gapFillNearest(slots, dailyTarget, dayUsedIds);
 
-    const dCandidates = getCandidates(dPool, dBudget, dayUsedIds, usedFoodIds, maxD, false);
-    const dinner      = optimizeSlot(dCandidates, dBudget, dayUsedIds);
-    commit(dinner, dayUsedIds, usedFoodIds);
-
-    // ── Step 2: Multi-pass gap-fill (reuses cross-day foods if needed) ──
-    multiPassGapFill(
-        [
-            { meal: breakfast, pool: bPool, budget: bBudget },
-            { meal: lunch,     pool: lPool, budget: lBudget },
-            { meal: dinner,    pool: dPool, budget: dBudget },
-        ],
-        dailyTarget,
-        dayUsedIds,
-        usedFoodIds
-    );
-
-    const finalTotal = [...breakfast, ...lunch, ...dinner]
-        .reduce((s, f) => s + (f.calories || 0), 0);
-
+    const total = dayTotal(slots);
     return {
-        breakfast,
-        lunch,
-        dinner,
-        dailyTotal: Math.round(finalTotal),
+        breakfast: slots[0].meal,
+        lunch: slots[1].meal,
+        dinner: slots[2].meal,
+        dailyTotal: Math.round(total),
+        gap: Math.max(0, dailyTarget - total),
     };
 }
 
-module.exports = { optimizeSlot, pickDailyMealsOptimized };
+function gapFillNearest(slots, dailyTarget, dayUsedIds) {
+    for (let pass = 0; pass < 50; pass++) {
+        const currentTotal = dayTotal(slots);
+        const gap = dailyTarget - currentTotal;
+        if (gap <= NEAR_TARGET_GAP) break;
+
+        let bestPick = null;
+        let bestSlot = null;
+        let bestNewGap = Infinity;
+
+        for (const slot of slots) {
+            if (slot.meal.length >= MAX_ITEMS_PER_SLOT) continue;
+
+            for (const f of slot.pool) {
+                if (!f.id || dayUsedIds.has(f.id)) continue;
+                const cal = f.calories || 0;
+                if (cal <= 0 || cal > gap) continue;
+
+                const newGap = dailyTarget - (currentTotal + cal);
+                if (newGap >= 0 && newGap < bestNewGap) {
+                    bestNewGap = newGap;
+                    bestPick = f;
+                    bestSlot = slot;
+                }
+            }
+        }
+
+        if (!bestPick || !bestSlot) break;
+
+        bestSlot.meal.push(bestPick);
+        dayUsedIds.add(bestPick.id);
+    }
+}
+
+function pickBestAttempt(attempts, dailyTarget) {
+    let best = null;
+    for (const a of attempts) {
+        if (!a) continue;
+        if (!best || a.gap < best.gap || (a.gap === best.gap && a.dailyTotal > best.dailyTotal)) {
+            best = a;
+        }
+    }
+    return best;
+}
+
+// ── Public API ───────────────────────────────────────────────
+function pickDailyMealsOptimized(bPool, lPool, dPool, dailyTarget, _usedFoodIds) {
+    const ratioVariants = [
+        MEAL_RATIOS,
+        { breakfast: 0.25, lunch: 0.45, dinner: 0.30 },
+        { breakfast: 0.35, lunch: 0.35, dinner: 0.30 },
+        { breakfast: 0.30, lunch: 0.35, dinner: 0.35 },
+        { breakfast: 0.20, lunch: 0.50, dinner: 0.30 },
+    ];
+
+    const attempts = [];
+
+    const exhaustive = searchNearestDay(bPool, lPool, dPool, dailyTarget);
+    if (exhaustive) attempts.push(exhaustive);
+
+    for (const ratios of ratioVariants) {
+        attempts.push(buildDayGreedy(bPool, lPool, dPool, dailyTarget, ratios));
+    }
+
+    const best = pickBestAttempt(attempts, dailyTarget);
+
+    if (!best) {
+        return {
+            breakfast: [],
+            lunch: [],
+            dinner: [],
+            dailyTotal: 0,
+        };
+    }
+
+    return {
+        breakfast: best.breakfast,
+        lunch: best.lunch,
+        dinner: best.dinner,
+        dailyTotal: best.dailyTotal,
+    };
+}
+
+/**
+ * Build a full week; reuses the best single-day plan on any day that
+ * still misses the target (user asked for repeats when needed).
+ */
+function pickWeeklyMealsOptimized(bPool, lPool, dPool, dailyTarget, dayCount = 7) {
+    const days = [];
+    let template = null;
+
+    for (let i = 0; i < dayCount; i++) {
+        let day = pickDailyMealsOptimized(bPool, lPool, dPool, dailyTarget, {});
+
+        if (day.dailyTotal < dailyTarget - NEAR_TARGET_GAP && template) {
+            day = {
+                breakfast: [...template.breakfast],
+                lunch: [...template.lunch],
+                dinner: [...template.dinner],
+                dailyTotal: template.dailyTotal,
+            };
+        }
+
+        if (!template || Math.abs(dailyTarget - day.dailyTotal) < Math.abs(dailyTarget - template.dailyTotal)) {
+            template = day;
+        }
+
+        days.push(day);
+    }
+
+    return days;
+}
+
+module.exports = {
+    optimizeSlot,
+    pickDailyMealsOptimized,
+    pickWeeklyMealsOptimized,
+    NEAR_TARGET_GAP,
+};
