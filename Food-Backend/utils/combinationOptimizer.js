@@ -31,9 +31,7 @@ function validFoods(pool) {
 }
 
 function cacheKey(pool, budget) {
-    const ids = pool.length <= 50
-        ? pool.map(f => f.id).join(',')
-        : `len:${pool.length}`;
+    const ids = pool.map(f => f.id).join(',');
     return `${ids}|${budget}`;
 }
 
@@ -43,14 +41,40 @@ function rotateList(arr, offset) {
     return o === 0 ? arr : [...arr.slice(o), ...arr.slice(0, o)];
 }
 
-function poolForWeek(pool, weeklyUsedIds, allowRepeatForCalories) {
-    const base = validFoods(pool);
-    if (allowRepeatForCalories) return base;
-    return base.filter(f => !weeklyUsedIds.has(f.id));
+function randomizePool(pool) {
+    if (pool.length <= 8) return pool;
+    const shuffled = [...pool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const excludeCount = Math.floor(shuffled.length * 0.15);
+    return shuffled.slice(excludeCount);
 }
 
-function expandCandidates(pool, mealBudget, dayUsedIds, weeklyUsedIds, dayIndex, allowRepeat) {
-    const base = poolForWeek(pool, weeklyUsedIds, allowRepeat);
+function poolForWeek(pool, weeklyUsedIds, previousDayUsedIds, allowRepeatForCalories) {
+    const base = validFoods(pool);
+    
+    // Attempt to exclude consecutive repeats first
+    let filtered = base;
+    if (previousDayUsedIds && previousDayUsedIds.size > 0) {
+        const noConsecutive = base.filter(f => !previousDayUsedIds.has(f.id));
+        if (noConsecutive.length > 0) {
+            filtered = noConsecutive;
+        }
+    }
+    
+    if (allowRepeatForCalories) return filtered;
+    
+    const noWeekly = filtered.filter(f => !weeklyUsedIds.has(f.id));
+    if (noWeekly.length > 0) {
+        return noWeekly;
+    }
+    return filtered;
+}
+
+function expandCandidates(pool, mealBudget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex, allowRepeat) {
+    const base = poolForWeek(pool, weeklyUsedIds, previousDayUsedIds, allowRepeat);
     if (base.length === 0) return [];
 
     const key = cacheKey(base, mealBudget);
@@ -109,45 +133,70 @@ function collectDayUsedIds(day) {
 /**
  * Subset closest to meal budget (minimize |budget - total|), never over budget.
  */
-function optimizeMealSlot(pool, budget, dayUsedIds, weeklyUsedIds, dayIndex, allowRepeat) {
-    const items = expandCandidates(pool, budget, dayUsedIds, weeklyUsedIds, dayIndex, allowRepeat);
-    if (items.length === 0) return [];
-
+function optimizeMealSlot(pool, budget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex, allowRepeat) {
+    const items = expandCandidates(pool, budget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex, allowRepeat);
     let best = [];
-    let bestGap = Infinity;
 
-    function search(start, pick, total) {
-        const gap = budget - total;
-        if (pick.length > 0 && gap >= 0 && gap < bestGap) {
-            bestGap = gap;
-            best = [...pick];
-            if (gap === 0) return;
+    if (items.length > 0) {
+        let bestGap = Infinity;
+
+        function search(start, pick, total) {
+            const gap = budget - total;
+            if (pick.length > 0 && gap >= 0 && gap < bestGap) {
+                bestGap = gap;
+                best = [...pick];
+                if (gap === 0) return;
+            }
+            if (pick.length >= MAX_ITEMS_PER_SLOT || start >= items.length) return;
+
+            for (let i = start; i < items.length; i++) {
+                const cal = items[i].calories || 0;
+                if (total + cal > budget) continue;
+                pick.push(items[i]);
+                search(i + 1, pick, total + cal);
+                pick.pop();
+            }
         }
-        if (pick.length >= MAX_ITEMS_PER_SLOT || start >= items.length) return;
 
-        for (let i = start; i < items.length; i++) {
-            const cal = items[i].calories || 0;
-            if (total + cal > budget) continue;
-            pick.push(items[i]);
-            search(i + 1, pick, total + cal);
-            pick.pop();
+        search(0, [], 0);
+
+        if (best.length === 0) {
+            const single = items
+                .filter(f => (f.calories || 0) <= budget)
+                .sort((a, b) => Math.abs(budget - (a.calories || 0)) - Math.abs(budget - (b.calories || 0)))[0];
+            if (single) best = [single];
         }
     }
 
-    search(0, [], 0);
-
-    if (best.length === 0) {
-        const single = items
-            .filter(f => (f.calories || 0) <= budget)
-            .sort((a, b) => Math.abs(budget - (a.calories || 0)) - Math.abs(budget - (b.calories || 0)))[0];
-        if (single) best = [single];
+    // Fallback: If best is still empty, guarantee at least 1 food
+    if (best.length === 0 && pool.length > 0) {
+        // Enforce intra-day uniqueness: must not be used today
+        const unusedToday = pool.filter(f => f.id && !dayUsedIds.has(f.id) && (f.calories || 0) > 0);
+        
+        if (unusedToday.length > 0) {
+            // 1. Try to find something within budget ignoring weekly reuse constraints
+            const withinBudget = unusedToday.filter(f => (f.calories || 0) <= budget);
+            if (withinBudget.length > 0) {
+                // Pick the one closest to budget
+                const sorted = [...withinBudget].sort((a, b) => Math.abs(budget - (a.calories || 0)) - Math.abs(budget - (b.calories || 0)));
+                best = [sorted[0]];
+            } else {
+                // 2. If nothing fits within budget, pick the single item with the lowest calories to minimize overshoot
+                const sorted = [...unusedToday].sort((a, b) => (a.calories || 0) - (b.calories || 0));
+                best = [sorted[0]];
+            }
+        } else if (pool.length > 0) {
+            // Absolute fallback: if everything has been used today (very rare), pick the first food from pool
+            const sorted = [...pool].sort((a, b) => (a.calories || 0) - (b.calories || 0));
+            best = [sorted[0]];
+        }
     }
 
     best.forEach(f => dayUsedIds.add(f.id));
     return best;
 }
 
-function gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, dayIndex, allowRepeat) {
+function gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex, allowRepeat) {
     const tol = acceptableGap(dailyTarget);
     const slots = [
         { meal: meals.breakfast, pool: pools.b, type: 'breakfast' },
@@ -167,9 +216,9 @@ function gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, d
         for (const slot of slots) {
             if (slot.meal.length >= MAX_ITEMS_PER_SLOT) continue;
 
-            let candidates = expandCandidates(slot.pool, gap, dayUsedIds, weeklyUsedIds, dayIndex + pass, allowRepeat);
+            let candidates = expandCandidates(slot.pool, gap, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex + pass, allowRepeat);
             if (candidates.length === 0) {
-                candidates = poolForWeek(slot.pool, weeklyUsedIds, allowRepeat)
+                candidates = poolForWeek(slot.pool, weeklyUsedIds, previousDayUsedIds, allowRepeat)
                     .filter(f => !dayUsedIds.has(f.id) && (f.calories || 0) > 0 && (f.calories || 0) <= gap)
                     .sort((a, b) => Math.abs(gap - (a.calories || 0)) - Math.abs(gap - (b.calories || 0)))
                     .slice(0, 15);
@@ -195,7 +244,7 @@ function gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, d
     }
 }
 
-function repairDayToTarget(day, pools, dailyTarget, weeklyUsedIds, dayIndex) {
+function repairDayToTarget(day, pools, dailyTarget, weeklyUsedIds, previousDayUsedIds, dayIndex) {
     const dayUsedIds = collectDayUsedIds(day);
     const meals = {
         breakfast: day.breakfast,
@@ -204,11 +253,11 @@ function repairDayToTarget(day, pools, dailyTarget, weeklyUsedIds, dayIndex) {
     };
     const tol = acceptableGap(dailyTarget);
 
-    gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, dayIndex + 100, false);
+    gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex + 100, false);
 
     let total = dayTotalFromMeals(meals.breakfast, meals.lunch, meals.dinner);
     if (dailyTarget - total > tol) {
-        gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, dayIndex + 200, true);
+        gapFillToTarget(meals, pools, dailyTarget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex + 200, true);
         total = dayTotalFromMeals(meals.breakfast, meals.lunch, meals.dinner);
     }
 
@@ -220,15 +269,15 @@ function repairDayToTarget(day, pools, dailyTarget, weeklyUsedIds, dayIndex) {
     return day;
 }
 
-function buildDayForRatios(bPool, lPool, dPool, dailyTarget, weeklyUsedIds, dayIndex, ratios, allowRepeat) {
+function buildDayForRatios(bPool, lPool, dPool, dailyTarget, weeklyUsedIds, previousDayUsedIds, dayIndex, ratios, allowRepeat) {
     const bBudget = Math.round(dailyTarget * ratios.breakfast);
     const lBudget = Math.round(dailyTarget * ratios.lunch);
     const dBudget = dailyTarget - bBudget - lBudget;
     const dayUsedIds = new Set();
 
-    const breakfast = optimizeMealSlot(bPool, bBudget, dayUsedIds, weeklyUsedIds, dayIndex, allowRepeat);
-    const lunch = optimizeMealSlot(lPool, lBudget, dayUsedIds, weeklyUsedIds, dayIndex + 1, allowRepeat);
-    const dinner = optimizeMealSlot(dPool, dBudget, dayUsedIds, weeklyUsedIds, dayIndex + 2, allowRepeat);
+    const breakfast = optimizeMealSlot(bPool, bBudget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex, allowRepeat);
+    const lunch = optimizeMealSlot(lPool, lBudget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex + 1, allowRepeat);
+    const dinner = optimizeMealSlot(dPool, dBudget, dayUsedIds, weeklyUsedIds, previousDayUsedIds, dayIndex + 2, allowRepeat);
 
     const day = {
         breakfast,
@@ -238,21 +287,21 @@ function buildDayForRatios(bPool, lPool, dPool, dailyTarget, weeklyUsedIds, dayI
         gap: dailyTarget,
     };
 
-    return repairDayToTarget(day, { b: bPool, l: lPool, d: dPool }, dailyTarget, weeklyUsedIds, dayIndex);
+    return repairDayToTarget(day, { b: bPool, l: lPool, d: dPool }, dailyTarget, weeklyUsedIds, previousDayUsedIds, dayIndex);
 }
 
-function buildBestDay(bPool, lPool, dPool, dailyTarget, weeklyUsedIds, dayIndex) {
+function buildBestDay(bPool, lPool, dPool, dailyTarget, weeklyUsedIds, previousDayUsedIds, dayIndex) {
     const tol = acceptableGap(dailyTarget);
     let best = null;
 
     for (let r = 0; r < RATIO_VARIANTS.length; r++) {
         let attempt = buildDayForRatios(
-            bPool, lPool, dPool, dailyTarget, weeklyUsedIds, dayIndex + r * 7, RATIO_VARIANTS[r], false
+            bPool, lPool, dPool, dailyTarget, weeklyUsedIds, previousDayUsedIds, dayIndex + r * 7, RATIO_VARIANTS[r], false
         );
 
         if (attempt.gap > tol) {
             attempt = buildDayForRatios(
-                bPool, lPool, dPool, dailyTarget, weeklyUsedIds, dayIndex + r * 7 + 50, RATIO_VARIANTS[r], true
+                bPool, lPool, dPool, dailyTarget, weeklyUsedIds, previousDayUsedIds, dayIndex + r * 7 + 50, RATIO_VARIANTS[r], true
             );
         }
 
@@ -262,7 +311,7 @@ function buildBestDay(bPool, lPool, dPool, dailyTarget, weeklyUsedIds, dayIndex)
         if (attempt.gap <= tol) break;
     }
 
-    return repairDayToTarget(best, { b: bPool, l: lPool, d: dPool }, dailyTarget, weeklyUsedIds, dayIndex + 300);
+    return repairDayToTarget(best, { b: bPool, l: lPool, d: dPool }, dailyTarget, weeklyUsedIds, previousDayUsedIds, dayIndex + 300);
 }
 
 function trackDayFoods(day, weeklyUsedIds) {
@@ -273,7 +322,10 @@ function trackDayFoods(day, weeklyUsedIds) {
 
 function pickDailyMealsOptimized(bPool, lPool, dPool, dailyTarget) {
     clearPlannerCache();
-    const day = buildBestDay(bPool, lPool, dPool, dailyTarget, new Set(), 0);
+    const activeBPool = randomizePool(bPool);
+    const activeLPool = randomizePool(lPool);
+    const activeDPool = randomizePool(dPool);
+    const day = buildBestDay(activeBPool, activeLPool, activeDPool, dailyTarget, new Set(), new Set(), 0);
     return {
         breakfast: day.breakfast,
         lunch: day.lunch,
@@ -285,7 +337,12 @@ function pickDailyMealsOptimized(bPool, lPool, dPool, dailyTarget) {
 function pickWeeklyMealsOptimized(bPool, lPool, dPool, dailyTarget, dayCount = 7) {
     clearPlannerCache();
 
+    const activeBPool = randomizePool(bPool);
+    const activeLPool = randomizePool(lPool);
+    const activeDPool = randomizePool(dPool);
+
     const weeklyUsedIds = new Set();
+    let previousDayUsedIds = new Set();
     const usedSignatures = new Set();
     const days = [];
     const tol = acceptableGap(dailyTarget);
@@ -296,7 +353,7 @@ function pickWeeklyMealsOptimized(bPool, lPool, dPool, dailyTarget, dayCount = 7
 
         for (let attempt = 0; attempt < 10; attempt++) {
             const candidate = buildBestDay(
-                bPool, lPool, dPool, dailyTarget, weeklyUsedIds, i * 19 + attempt * 31
+                activeBPool, activeLPool, activeDPool, dailyTarget, weeklyUsedIds, previousDayUsedIds, i * 19 + attempt * 31
             );
             const sig = daySignature(candidate);
 
@@ -325,6 +382,7 @@ function pickWeeklyMealsOptimized(bPool, lPool, dPool, dailyTarget, dayCount = 7
 
         usedSignatures.add(chosenSig);
         trackDayFoods(chosen, weeklyUsedIds);
+        previousDayUsedIds = collectDayUsedIds(chosen);
 
         days.push({
             breakfast: chosen.breakfast,
@@ -338,7 +396,7 @@ function pickWeeklyMealsOptimized(bPool, lPool, dPool, dailyTarget, dayCount = 7
 }
 
 function optimizeSlot(eligible, budget, dayUsedIds) {
-    return optimizeMealSlot(eligible, budget, dayUsedIds, new Set(), 0, false);
+    return optimizeMealSlot(eligible, budget, dayUsedIds, new Set(), new Set(), 0, false);
 }
 
 module.exports = {
