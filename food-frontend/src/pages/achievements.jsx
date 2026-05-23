@@ -43,9 +43,15 @@ const Achievements = () => {
       navigate('/');
       return;
     }
-    // Hardcoded mock for now, this would normally fetch from backend
-    // You can replace this with actual backend logic later
-    setCompletedDays(12); 
+    
+    const parsedUser = JSON.parse(user);
+    const userId = parsedUser.id || parsedUser.uid || parsedUser._id;
+    const savedDays = localStorage.getItem(`completed_days_${userId}`);
+    if (savedDays) {
+      setCompletedDays(parseInt(savedDays, 10));
+    } else {
+      setCompletedDays(0);
+    }
   }, [navigate]);
 
   const achievementsList = [

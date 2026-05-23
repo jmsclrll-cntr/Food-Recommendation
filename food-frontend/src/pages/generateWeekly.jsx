@@ -238,9 +238,55 @@ const GenerateWeekly = () => {
       }
 
       setIsSaving(true);
+
+      // Fetch the current active plan to calculate its completion before saving the new one
+      let currentPlanCompletion = 0;
+      try {
+        const activePlanRes = await axios.get(`http://localhost:5000/api/diets/weekly/${userId}`);
+        const activePlan = activePlanRes.data;
+        if (activePlan && Object.keys(activePlan).length > 0) {
+          const daysList = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+          let totalItems = 0;
+          let completedCount = 0;
+          
+          daysList.forEach(dayName => {
+            const dayPlan = activePlan[dayName];
+            if (dayPlan && dayPlan.meals) {
+              const progress = localStorage.getItem(`progress_${dayName}_${userId}`);
+              const completedItems = progress ? JSON.parse(progress) : {};
+              
+              ['breakfast', 'lunch', 'dinner'].forEach(meal => {
+                const items = dayPlan.meals[meal] || [];
+                totalItems += items.length;
+                items.forEach((_, idx) => {
+                  if (completedItems[`${meal}-${idx}`]) {
+                    completedCount++;
+                  }
+                });
+              });
+            }
+          });
+          
+          if (totalItems > 0) {
+            currentPlanCompletion = Math.round((completedCount / totalItems) * 100);
+          }
+        }
+      } catch (err) {
+        console.log("No previous active plan to archive or error fetching it:", err.message);
+      }
+
+      // Save the new weekly plan and archive the old one
       await axios.post('http://localhost:5000/api/diets/save-weekly', {
         userId,
-        plan: weeklyPlan
+        plan: weeklyPlan,
+        currentPlanCompletion
+      });
+
+      // Clear the local progress checkboxes and day_done items for all days
+      const daysList = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      daysList.forEach(dayName => {
+        localStorage.removeItem(`progress_${dayName}_${userId}`);
+        localStorage.removeItem(`day_done_${dayName}_${userId}`);
       });
       
       // Trigger glassmorphic toast & redirect to dashboard

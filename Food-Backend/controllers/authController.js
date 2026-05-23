@@ -1,26 +1,93 @@
 const { auth, db } = require('../config/firebase'); 
 const axios = require('axios');
+const { sendOTPEmail } = require('../utils/emailService');
 require('dotenv').config();
+
+// --- SEND OTP ---
+const sendOTP = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: "Email address is required." });
+        }
+
+        // Check if email already exists in Firebase Auth
+        try {
+            await auth.getUserByEmail(email);
+            // User exists
+            return res.status(400).json({ error: "This email is already registered." });
+        } catch (error) {
+            if (error.code !== 'auth/user-not-found') {
+                console.error("Firebase getUser Error:", error);
+                return res.status(500).json({ error: "Verification check failed: " + error.message });
+            }
+        }
+
+        // Generate 6-digit OTP code
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Save OTP to Firestore
+        await db.collection('otps').doc(email).set({
+            email,
+            otp,
+            createdAt: new Date().toISOString()
+        });
+
+        // Send Email
+        const result = await sendOTPEmail(email, otp);
+
+        res.status(200).json({
+            message: "A 6-digit verification code has been sent to your email address.",
+            method: result.method,
+            devCode: (result.method === 'console' || result.method === 'console_fallback') ? otp : undefined
+        });
+    } catch (error) {
+        console.error("Send OTP Error:", error);
+        res.status(500).json({ error: "Failed to send verification code: " + error.message });
+    }
+};
 
 // --- REGISTER ---
 const register = async (req, res) => {
     try {
-        const { email, password, username, name } = req.body;
+        const { email, password, username, name, otp } = req.body;
 
-        // 1. Better Validation
+        // 1. Validation
         if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
+        if (!otp) return res.status(400).json({ error: "Verification code is required" });
         
-        // 2. FIRESTORE FIX: Ensure username is NEVER undefined
+        // 2. Verify OTP
+        const otpDoc = await db.collection('otps').doc(email).get();
+        if (!otpDoc.exists) {
+            return res.status(400).json({ error: "No verification code requested for this email. Please request a new one." });
+        }
+
+        const otpData = otpDoc.data();
+        if (otpData.otp !== otp) {
+            return res.status(400).json({ error: "Invalid verification code. Please check your email." });
+        }
+
+        // Check expiry (10 minutes)
+        const expiryTime = 10 * 60 * 1000;
+        const timeElapsed = Date.now() - new Date(otpData.createdAt).getTime();
+        if (timeElapsed > expiryTime) {
+            return res.status(400).json({ error: "Verification code has expired. Please request a new one." });
+        }
+
+        // Delete the verified OTP
+        await db.collection('otps').doc(email).delete();
+
+        // 3. FIRESTORE FIX: Ensure username is NEVER undefined
         const finalUsername = username || name || email.split('@')[0] || "New User";
 
-        // 3. Create user in Firebase AUTH
+        // 4. Create user in Firebase AUTH
         const userRecord = await auth.createUser({
             email,
             password,
             displayName: finalUsername,
         });
 
-        // 4. Save to Firestore (Fail-safe)
+        // 5. Save to Firestore (Fail-safe)
         const userData = {
             uid: userRecord.uid,
             username: finalUsername,
@@ -37,7 +104,7 @@ const register = async (req, res) => {
             user: userData
         });
     } catch (error) {
-        console.error("Register Error:", error.code);
+        console.error("Register Error:", error.code || error.message);
         // Better error handling for UI
         let message = "Registration failed";
         if (error.code === 'auth/email-already-exists') message = "This email is already registered.";
@@ -122,4 +189,4 @@ const googleLogin = async (req, res) => {
     }
 };
 
-module.exports = { register, login, googleLogin };
+module.exports = { register, login, googleLogin, sendOTP };

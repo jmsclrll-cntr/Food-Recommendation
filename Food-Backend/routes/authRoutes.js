@@ -3,7 +3,12 @@ const express = require('express');
 const router = express.Router();
 
 // 1. Destructure the functions from the controller
-const { register, login, googleLogin } = require('../controllers/authController');
+const { register, login, googleLogin, sendOTP } = require('../controllers/authController');
+
+/**
+ * @route   POST /api/auth/send-otp
+ */
+router.post('/send-otp', sendOTP);
 
 /**
  * @route   POST /api/auth/register

@@ -22,11 +22,18 @@ const EMOJIS = [
 
 const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [animKey, setAnimKey] = useState(0);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState(0); // 0 = details, 1 = OTP verification
+  const [otp, setOtp] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
+  const [otpSentMessage, setOtpSentMessage] = useState('');
+  const [devCode, setDevCode] = useState('');
   const navigate = useNavigate();
 
   // DARK MODE LOGIC
@@ -39,16 +46,103 @@ const Signup = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const handleRegister = async (e) => {
+  useEffect(() => {
+    let interval = null;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
+  const handleSendOTP = async (e) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      alert("Passwords do not match!");
+      return;
+    }
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters!");
+      return;
+    }
     if (loading) return;
     setLoading(true);
     try {
-      await axios.post('http://localhost:5000/api/auth/register', { email, password, name: fullName });
+      const response = await axios.post('http://localhost:5000/api/auth/send-otp', { email });
+      setOtpSentMessage(response.data.message);
+      
+      if (response.data.devCode) {
+        setDevCode(response.data.devCode);
+      } else {
+        setDevCode('');
+      }
+      
+      if (response.data.method === 'console' || response.data.method === 'console_fallback') {
+        alert("Development Mode: Verification code has been printed to the backend console terminal!");
+      } else {
+        alert("Verification code has been sent to your email!");
+      }
+      
+      setStep(1);
+      setResendTimer(60);
+    } catch (err) {
+      console.error(err);
+      alert("Verification Error: " + (err.response?.data?.error || "Failed to send code"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (resendTimer > 0 || loading) return;
+    setLoading(true);
+    try {
+      const response = await axios.post('http://localhost:5000/api/auth/send-otp', { email });
+      setOtpSentMessage(response.data.message);
+      setResendTimer(60);
+      
+      if (response.data.devCode) {
+        setDevCode(response.data.devCode);
+      } else {
+        setDevCode('');
+      }
+      
+      if (response.data.method === 'console' || response.data.method === 'console_fallback') {
+        alert("Development Mode: Verification code printed to the backend console terminal!");
+      } else {
+        alert("Verification code has been resent to your email!");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Resend Error: " + (err.response?.data?.error || "Failed to resend code"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    if (!otp) {
+      alert("Please enter the verification code.");
+      return;
+    }
+    if (loading) return;
+    setLoading(true);
+    try {
+      await axios.post('http://localhost:5000/api/auth/register', { 
+        email, 
+        password, 
+        name: fullName,
+        otp 
+      });
+      alert("Registration successful! Please log in.");
       navigate('/');
     } catch (err) {
       console.error(err);
-      alert("Registration Error: " + (err.response?.data?.error || "Check your details"));
+      alert("Registration Error: " + (err.response?.data?.error || "Check details and code"));
     } finally {
       setLoading(false);
     }
@@ -168,90 +262,187 @@ const Signup = () => {
         {/* Right Panel */}
         <div className="flex-1 p-8 md:p-12 flex flex-col justify-center transition-colors duration-500">
           <div className="max-w-md mx-auto w-full">
-            <h2 className={`font-serif text-3xl ${textMain} mb-1`}>Create Account</h2>
-            <p className={`text-sm ${textSub} mb-8 italic`}>Premium Nutrition</p>
+            {step === 0 ? (
+              <>
+                <h2 className={`font-serif text-3xl ${textMain} mb-1`}>Create Account</h2>
+                <p className={`text-sm ${textSub} mb-8 italic`}>Premium Nutrition</p>
 
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Full name</label>
-                <div className="relative group">
-                  <User className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
-                  <input 
-                    type="text" 
-                    value={fullName} 
-                    onChange={(e) => setFullName(e.target.value)} 
-                    placeholder="Full Name" 
-                    required 
-                    className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
-                  />
-                </div>
-              </div>
+                <form onSubmit={handleSendOTP} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Full name</label>
+                    <div className="relative group">
+                      <User className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                      <input 
+                        type="text" 
+                        value={fullName} 
+                        onChange={(e) => setFullName(e.target.value)} 
+                        placeholder="Full Name" 
+                        required 
+                        className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Email address</label>
-                <div className="relative group">
-                  <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
-                  <input 
-                    type="email" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    placeholder="Email" 
-                    required 
-                    className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
-                  />
-                </div>
-              </div>
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Email address</label>
+                    <div className="relative group">
+                      <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                      <input 
+                        type="email" 
+                        value={email} 
+                        onChange={(e) => setEmail(e.target.value)} 
+                        placeholder="Email" 
+                        required 
+                        className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Password</label>
-                <div className="relative group">
-                  <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                    placeholder="••••••••" 
-                    required 
-                    className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
-                  />
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Password</label>
+                    <div className="relative group">
+                      <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        value={password} 
+                        onChange={(e) => setPassword(e.target.value)} 
+                        placeholder="••••••••" 
+                        required 
+                        className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowPassword(!showPassword)} 
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
+                      >
+                        {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Confirm Password</label>
+                    <div className="relative group">
+                      <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                      <input 
+                        type={showConfirmPassword ? "text" : "password"} 
+                        value={confirmPassword} 
+                        onChange={(e) => setConfirmPassword(e.target.value)} 
+                        placeholder="••••••••" 
+                        required 
+                        className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)} 
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                      </button>
+                    </div>
+                  </div>
+
                   <button 
-                    type="button" 
-                    onClick={() => setShowPassword(!showPassword)} 
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] disabled:bg-[#2d5a27]/50 text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn mt-4"
                   >
-                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                    {loading ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : "Register Now →"}
+                  </button>
+                </form>
+
+                <div className="flex items-center gap-4 py-6">
+                  <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
+                  <span className="text-[10px] font-bold text-[#b0a898] tracking-widest uppercase">OR</span>
+                  <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
+                </div>
+
+                <button 
+                  onClick={handleGoogle} 
+                  className={`w-full h-12 ${darkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#c8c2b8] hover:bg-[#f5faf4]'} border-2 rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6 clay-btn`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.6-6.6C35.4 2.7 30 .5 24 .5 14.7.5 6.7 6.1 3 14l7.8 6c1.9-5.5 7-9.5 13.2-9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.6A14.4 14.4 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.5 13.4A23.5 23.5 0 0 0 .5 24c0 3.8.9 7.4 2.5 10.6l7.8-6z"/><path fill="#34A853" d="M24 47.5c6 0 11-2 14.7-5.3l-7.5-5.8c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.4-4.2-13.2-9.9l-7.8 6C6.6 41.9 14.7 47.5 24 47.5z"/>
+                  </svg>
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-white/80' : 'text-gray-400'}`}>Sign up with Google</span>
+                </button>
+
+                <p className="text-center text-[9px] text-gray-400 font-bold uppercase tracking-widest">
+                  Already a member? <Link to="/" className="text-[#2d5a27] font-black hover:underline transition-all">Sign In</Link>
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className={`font-serif text-3xl ${textMain} mb-1`}>Verify Email</h2>
+                <p className={`text-sm ${textSub} mb-6 italic`}>
+                  We sent a 6-digit verification code to <span className="font-bold font-sans not-italic text-[#8ecb84]">{email}</span>.
+                </p>
+
+                {devCode && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 mb-6 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 dark:bg-yellow-500/5 text-center flex flex-col items-center justify-center relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500/30"></div>
+                    <span className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 tracking-[0.2em] mb-1">🛠️ Sandbox Development Helper</span>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight max-w-[280px] mb-3">
+                      SMTP credentials are not configured in your backend <code>.env</code>. Use the test code below:
+                    </p>
+                    <div className="px-5 py-2 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl">
+                      <span className="text-2xl font-mono font-bold tracking-[0.2em] text-[#2d5a27] dark:text-[#8ecb84] pl-1 select-all">{devCode}</span>
+                    </div>
+                  </motion.div>
+                )}
+
+                <form onSubmit={handleRegister} className="space-y-6">
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub} block text-center`}>Enter 6-Digit Code</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={otp} 
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                        placeholder="000000" 
+                        maxLength={6}
+                        required 
+                        className={`w-full h-14 text-center font-bold tracking-[1em] text-2xl pl-[1em] ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all ${textMain} clay-input`} 
+                      />
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={loading || otp.length < 6}
+                    className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] disabled:bg-[#2d5a27]/50 text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn"
+                  >
+                    {loading ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : "Verify & Complete Signup →"}
+                  </button>
+                </form>
+
+                <div className="mt-8 text-center space-y-4">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                    Didn't receive the code?{' '}
+                    <button 
+                      type="button" 
+                      onClick={handleResendOTP} 
+                      disabled={resendTimer > 0 || loading}
+                      className={`font-black hover:underline transition-all ${resendTimer > 0 ? 'text-gray-500 cursor-not-allowed' : 'text-[#8ecb84]'}`}
+                    >
+                      Resend Code {resendTimer > 0 ? `(${resendTimer}s)` : ''}
+                    </button>
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => { setStep(0); setOtp(''); }}
+                    className="text-[9px] text-[#2d5a27] hover:underline uppercase font-black tracking-widest block mx-auto"
+                  >
+                    ← Back to signup details
                   </button>
                 </div>
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] disabled:bg-[#2d5a27]/50 text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn mt-4"
-              >
-                Register Now →
-              </button>
-            </form>
-
-            <div className="flex items-center gap-4 py-6">
-              <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
-              <span className="text-[10px] font-bold text-[#b0a898] tracking-widest uppercase">OR</span>
-              <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
-            </div>
-
-            <button 
-              onClick={handleGoogle} 
-              className={`w-full h-12 ${darkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#c8c2b8] hover:bg-[#f5faf4]'} border-2 rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6 clay-btn`}
-            >
-              <svg width="18" height="18" viewBox="0 0 48 48">
-                <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.6-6.6C35.4 2.7 30 .5 24 .5 14.7.5 6.7 6.1 3 14l7.8 6c1.9-5.5 7-9.5 13.2-9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.6A14.4 14.4 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.5 13.4A23.5 23.5 0 0 0 .5 24c0 3.8.9 7.4 2.5 10.6l7.8-6z"/><path fill="#34A853" d="M24 47.5c6 0 11-2 14.7-5.3l-7.5-5.8c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.4-4.2-13.2-9.9l-7.8 6C6.6 41.9 14.7 47.5 24 47.5z"/>
-              </svg>
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-white/80' : 'text-gray-400'}`}>Sign up with Google</span>
-            </button>
-
-            <p className="text-center text-[9px] text-gray-400 font-bold uppercase tracking-widest">
-              Already a member? <Link to="/" className="text-[#2d5a27] font-black hover:underline transition-all">Sign In</Link>
-            </p>
+              </>
+            )}
           </div>
         </div>
       </div>

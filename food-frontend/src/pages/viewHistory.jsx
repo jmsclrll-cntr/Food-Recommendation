@@ -43,6 +43,53 @@ const ViewHistory = () => {
     const styles = getThemeStyles(darkMode);
     const { bgMain, cardBg, border, textMain, textSub, accentText } = styles;
 
+    const getPlanCompletion = (weeklyPlan, userId) => {
+        if (!weeklyPlan) return 0;
+        let totalItems = 0;
+        let completedCount = 0;
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        
+        days.forEach(day => {
+            const dayPlan = weeklyPlan[day];
+            if (dayPlan && dayPlan.meals) {
+                const progress = localStorage.getItem(`progress_${day}_${userId}`);
+                const completedItems = progress ? JSON.parse(progress) : {};
+                
+                ['breakfast', 'lunch', 'dinner'].forEach(meal => {
+                    const items = dayPlan.meals[meal] || [];
+                    totalItems += items.length;
+                    items.forEach((_, idx) => {
+                        if (completedItems[`${meal}-${idx}`]) {
+                            completedCount++;
+                        }
+                    });
+                });
+            }
+        });
+        
+        return totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
+    };
+
+    const formatDateRange = (savedAt) => {
+        if (!savedAt) return "N/A";
+        let start;
+        if (savedAt._seconds || savedAt.seconds) {
+            start = new Date((savedAt._seconds || savedAt.seconds) * 1000);
+        } else {
+            start = new Date(savedAt);
+        }
+        
+        if (isNaN(start.getTime())) return "N/A";
+        
+        const end = new Date(start.getTime() + 6 * 24 * 60 * 60 * 1000);
+        
+        const options = { month: 'short', day: 'numeric' };
+        const startStr = start.toLocaleDateString('en-US', options);
+        const endStr = end.toLocaleDateString('en-US', { ...options, year: 'numeric' });
+        
+        return `${startStr} - ${endStr}`;
+    };
+
     useEffect(() => {
         const fetchHistory = async () => {
             try {
@@ -54,34 +101,65 @@ const ViewHistory = () => {
                 const user = JSON.parse(storedUser);
                 const userId = user.id || user.uid || user._id;
 
-                // For now, we only fetch the CURRENT active weekly plan 
-                // because the backend doesn't save an archive of old plans yet!
-                const res = await axios.get(`http://localhost:5000/api/diets/weekly/${userId}`);
-                const planData = res.data;
+                // 1. Fetch current active plan
+                let activePlan = null;
+                try {
+                    const activeRes = await axios.get(`http://localhost:5000/api/diets/weekly/${userId}`);
+                    if (activeRes.data && Object.keys(activeRes.data).length > 0) {
+                        activePlan = activeRes.data;
+                    }
+                } catch (e) {
+                    console.log("No active weekly plan found.");
+                }
 
-                if (planData && Object.keys(planData).length > 0) {
-                    // Find the timestamp
-                    const anyDay = Object.keys(planData).find(d => planData[d].savedAt);
+                // 2. Fetch history
+                let archivedPlans = [];
+                try {
+                    const historyRes = await axios.get(`http://localhost:5000/api/diets/history/${userId}`);
+                    if (Array.isArray(historyRes.data)) {
+                        archivedPlans = historyRes.data;
+                    }
+                } catch (e) {
+                    console.error("Error fetching history list:", e);
+                }
+
+                // 3. Assemble combined history
+                const combined = [];
+                const totalPlans = archivedPlans.length + (activePlan ? 1 : 0);
+                const colors = ['#f5c842', '#6ab8ff', '#a8d8ea', '#fcb9aa', '#b5e2fa'];
+
+                if (activePlan) {
+                    const anyDay = Object.keys(activePlan).find(d => activePlan[d].savedAt);
                     let dateStr = "Current Week";
-                    if (anyDay && planData[anyDay].savedAt) {
-                        const ts = planData[anyDay].savedAt;
-                        const date = new Date((ts._seconds || ts.seconds) * 1000);
-                        dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    if (anyDay && activePlan[anyDay].savedAt) {
+                        const ts = activePlan[anyDay].savedAt;
+                        const date = ts._seconds ? new Date(ts._seconds * 1000) : new Date(ts);
+                        const end = new Date(date.getTime() + 6 * 24 * 60 * 60 * 1000);
+                        dateStr = `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
                     }
 
-                    // Push the current plan as the first "Active" history record.
-                    // We mock completion to 0% because completion tracking isn't built yet!
-                    setHistory([
-                        { 
-                            id: 1, 
-                            week: 'Active Protocol', 
-                            date: `Started: ${dateStr}`, 
-                            completion: 0, 
-                            status: 'Active', 
-                            color: '#8ecb84' 
-                        }
-                    ]);
+                    combined.push({
+                        id: 'active',
+                        week: `Week ${totalPlans} (Current)`,
+                        date: dateStr,
+                        completion: getPlanCompletion(activePlan, userId),
+                        status: 'Active',
+                        color: '#8ecb84'
+                    });
                 }
+
+                archivedPlans.forEach((record, index) => {
+                    combined.push({
+                        id: record.id || `archived-${index}`,
+                        week: `Week ${totalPlans - (activePlan ? 1 : 0) - index}`,
+                        date: formatDateRange(record.savedAt),
+                        completion: record.completion || 0,
+                        status: 'Completed',
+                        color: colors[index % colors.length]
+                    });
+                });
+
+                setHistory(combined);
             } catch (error) {
                 console.error("Error fetching history:", error);
             } finally {
@@ -91,6 +169,11 @@ const ViewHistory = () => {
 
         fetchHistory();
     }, [navigate]);
+
+    const avgCompletion = history.length > 0 ? Math.round(history.reduce((acc, h) => acc + h.completion, 0) / history.length) : 0;
+    const consistency = history.length === 0 ? 'N/A' :
+                        avgCompletion >= 85 ? 'High' :
+                        avgCompletion >= 60 ? 'Medium' : 'Low';
 
     return (
         <motion.div 
@@ -135,7 +218,7 @@ const ViewHistory = () => {
                         </div>
                         <div>
                             <p className={`text-[10px] font-bold uppercase tracking-widest ${textSub} mb-1`}>Total Plans</p>
-                            <p className="text-3xl font-serif italic">4 <span className="text-sm font-sans not-italic font-bold opacity-50">Weeks</span></p>
+                            <p className="text-3xl font-serif italic">{history.length} <span className="text-sm font-sans not-italic font-bold opacity-50">{history.length === 1 ? 'Week' : 'Weeks'}</span></p>
                         </div>
                     </div>
                     
@@ -145,7 +228,7 @@ const ViewHistory = () => {
                         </div>
                         <div>
                             <p className={`text-[10px] font-bold uppercase tracking-widest ${textSub} mb-1`}>Avg Completion</p>
-                            <p className="text-3xl font-serif italic">88 <span className="text-sm font-sans not-italic font-bold opacity-50">%</span></p>
+                            <p className="text-3xl font-serif italic">{avgCompletion} <span className="text-sm font-sans not-italic font-bold opacity-50">%</span></p>
                         </div>
                     </div>
 
@@ -155,25 +238,9 @@ const ViewHistory = () => {
                         </div>
                         <div>
                             <p className={`text-[10px] font-bold uppercase tracking-widest ${textSub} mb-1`}>Consistency</p>
-                            <p className="text-3xl font-serif italic">High <span className="text-sm font-sans not-italic font-bold opacity-50">Rating</span></p>
+                            <p className="text-3xl font-serif italic">{consistency} <span className="text-sm font-sans not-italic font-bold opacity-50">Rating</span></p>
                         </div>
                     </div>
-                </motion.div>
-
-                {/* ATTENTION ALERT FOR THE USER */}
-                <motion.div variants={itemVariants} className="mb-8 p-6 bg-red-500/10 border border-red-500/20 rounded-2xl relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>
-                    <h3 className="text-red-500 font-bold mb-2 flex items-center gap-2">
-                        <TrendingUp size={16} />
-                        SYSTEM NOTICE: Backend Features Required
-                    </h3>
-                    <p className={`text-sm ${textSub} leading-relaxed`}>
-                        This page is now successfully fetching from the database! However, it is currently only displaying your <strong>Active Protocol</strong>. 
-                        To populate this history timeline properly, we need to build two backend mechanisms:
-                        <br/><br/>
-                        1. <strong>Archiving System:</strong> Currently, generating a new plan overwrites the old one. We need to save old plans to a new <code>dietHistory</code> collection instead of deleting them. <br/>
-                        2. <strong>Completion Tracking:</strong> The system needs a way to track which meals you actually ate each day to calculate the % completion shown below.
-                    </p>
                 </motion.div>
 
                 {/* History Timeline */}

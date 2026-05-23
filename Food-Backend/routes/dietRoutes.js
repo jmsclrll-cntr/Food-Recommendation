@@ -11,4 +11,7 @@ router.get('/day/:day/:userId', dietController.getDayPlan);
 // Get the full 7-day plan
 router.get('/weekly/:userId', dietController.getWeeklyPlan);
 
+// Get diet plan history
+router.get('/history/:userId', dietController.getHistory);
+
 module.exports = router;
