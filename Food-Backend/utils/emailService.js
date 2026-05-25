@@ -20,7 +20,7 @@ const sendOTPEmail = async (email, otp) => {
         });
 
         const mailOptions = {
-            from: `"NutriFind Admin" <${user}>`,
+            from: `"NutriFind" <${user}>`,
             to: email,
             subject: 'NutriFind - Email Verification OTP',
             html: `

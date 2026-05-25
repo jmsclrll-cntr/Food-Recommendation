@@ -189,4 +189,33 @@ const googleLogin = async (req, res) => {
     }
 };
 
-module.exports = { register, login, googleLogin, sendOTP };
+// --- DELETE ACCOUNT ---
+const deleteAccount = async (req, res) => {
+    try {
+        const { uid } = req.body;
+        if (!uid) {
+            return res.status(400).json({ error: "User ID is required to delete an account." });
+        }
+
+        // 1. Delete from Firebase Auth
+        try {
+            await auth.deleteUser(uid);
+        } catch (authError) {
+            console.error("Firebase Auth Deletion Error:", authError);
+            if (authError.code !== 'auth/user-not-found') {
+                // If the error is anything other than user-not-found, we should probably stop
+                // or at least log it. But we still want to delete the Firestore document if possible.
+            }
+        }
+
+        // 2. Delete from Firestore
+        await db.collection('users').doc(uid).delete();
+
+        res.status(200).json({ message: "Account successfully deleted." });
+    } catch (error) {
+        console.error("Delete Account Error:", error);
+        res.status(500).json({ error: "Failed to delete account: " + error.message });
+    }
+};
+
+module.exports = { register, login, googleLogin, sendOTP, deleteAccount };

@@ -141,17 +141,32 @@ const Dashboard = () => {
         setLoadingDiet(false);
       });
 
-    const savedProgress = localStorage.getItem(
-      `progress_${today}_${userId}`
-    );
-
+    const savedProgress = localStorage.getItem(`progress_${today}_${userId}`);
     if (savedProgress) {
       setCompletedItems(JSON.parse(savedProgress));
     }
 
-    // Load completed days count from localStorage
-    const savedDays = localStorage.getItem(`completed_days_${userId}`);
-    if (savedDays) setCompletedDays(parseInt(savedDays, 10));
+    // Fetch diet history to calculate total completed days dynamically
+    axios
+      .get(`http://localhost:5000/api/diets/history/${userId}`)
+      .then((res) => {
+        const history = res.data || [];
+        const historyDays = history.reduce((acc, h) => acc + Math.round((h.completion || 0) / 100 * 7), 0);
+        
+        // Count locally completed days for the current week
+        const currentWeekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+          .filter(day => localStorage.getItem(`day_done_${day}_${userId}`) === '1').length;
+          
+        const totalCompleted = historyDays + currentWeekDays;
+        setCompletedDays(totalCompleted);
+        localStorage.setItem(`completed_days_${userId}`, totalCompleted.toString());
+      })
+      .catch((err) => {
+        console.error('Error fetching history for streak:', err);
+        // Fallback to localStorage if API fails
+        const savedDays = localStorage.getItem(`completed_days_${userId}`);
+        if (savedDays) setCompletedDays(parseInt(savedDays, 10));
+      });
   }, [navigate, today]);
 
   const toggleItem = (mealType, index) => {
@@ -342,7 +357,7 @@ const Dashboard = () => {
               </p>
 
               <p className={`text-sm font-bold ${textMain}`}>
-                14 Days
+                {completedDays} Day{completedDays !== 1 ? 's' : ''}
               </p>
             </div>
           </div>

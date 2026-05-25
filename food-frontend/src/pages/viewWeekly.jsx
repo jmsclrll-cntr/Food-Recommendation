@@ -73,7 +73,7 @@ const ViewWeekly = () => {
     if (loading) return (
         <div className={`h-screen flex flex-col items-center justify-center ${bgMain}`}>
             <Loader2 className="animate-spin text-[#6a9966] mb-4" size={32} />
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#6a9966]">Loading Your Protocol</p>
+            <p className="text-xs font-black uppercase tracking-[0.4em] text-[#6a9966]">Loading Your Protocol</p>
         </div>
     );
 
@@ -81,7 +81,7 @@ const ViewWeekly = () => {
         <div className={`h-screen flex flex-col items-center justify-center ${bgMain} text-center p-10`}>
             <h2 className={`font-serif text-3xl italic mb-4 ${textMain}`}>No Weekly Plan Found</h2>
             <p className={`text-sm mb-8 ${textSub}`}>You haven't saved a weekly plan yet. Generate one to get started.</p>
-            <button onClick={() => navigate('/generate-weekly')} className="bg-[#2d5a27] text-white px-8 py-4 font-bold text-[10px] uppercase tracking-[0.3em] clay-btn">Generate Now</button>
+            <button onClick={() => navigate('/generate-weekly')} className="bg-[#2d5a27] text-white px-8 py-4 font-bold text-xs uppercase tracking-[0.3em] clay-btn">Generate Now</button>
         </div>
     );
 
@@ -130,14 +130,14 @@ const ViewWeekly = () => {
                     </button>
                     <div>
                         <h1 className="font-serif text-3xl italic">Weekly Protocol</h1>
-                        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#6a9966]">Comprehensive Nutrition Overview</p>
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6a9966]">Comprehensive Nutrition Overview</p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-4">
                     <div className={`${cardBg} px-6 py-3 flex items-center gap-4 transition-colors clay-card`}>
                         <div className="text-right">
-                            <p className="text-[8px] font-black uppercase opacity-40">Current Day</p>
+                            <p className="text-xs font-black uppercase opacity-50 tracking-wider">Current Day</p>
                             <p className="text-sm font-bold">{activeDay}</p>
                         </div>
                         <Calendar className={accentText} size={20} />
@@ -179,7 +179,7 @@ const ViewWeekly = () => {
                                     : `${cardBg} hover:border-[#2d5a27]`}`}
                         >
                             <div className="relative z-10">
-                                <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${activeDayIdx === idx ? 'text-[#8ecb84]' : 'text-[#6a9966]'}`}>Day 0{idx+1}</p>
+                                <p className={`text-xs font-black uppercase tracking-wider mb-1 ${activeDayIdx === idx ? 'text-[#8ecb84]' : 'text-[#6a9966]'}`}>Day 0{idx+1}</p>
                                 <p className={`font-serif text-xl italic ${activeDayIdx === idx ? 'text-white' : textMain}`}>{day}</p>
                             </div>
 
@@ -220,7 +220,7 @@ const ViewWeekly = () => {
                                 <div key={type} className="space-y-6">
                                     <div className={`flex items-center gap-3 border-b ${border} pb-4`}>
                                         <span className="w-2 h-2 rounded-full bg-[#8ecb84]"></span>
-                                        <h3 className={`text-[11px] font-black uppercase tracking-[0.3em] ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>{type}</h3>
+                                        <h3 className={`text-xs font-black uppercase tracking-[0.2em] ${darkMode ? 'text-[#8ecb84]' : 'text-[#2d5a27]'}`}>{type}</h3>
                                     </div>
                                     <div className="space-y-4">
                                         {currentDayPlan?.[type]?.map((meal, mIdx) => (
@@ -232,17 +232,17 @@ const ViewWeekly = () => {
                                             >
                                                 <div className="flex justify-between items-start mb-3">
                                                     <p className={`text-sm font-bold leading-tight flex-1 ${textMain}`}>{meal.name}</p>
-                                                    <p className={`text-[10px] font-black ${darkMode ? 'bg-black/40 text-[#8ecb84]' : 'bg-white text-[#2d5a27]'} px-2 py-1 rounded-lg ml-2`}>{meal.calories} kcal</p>
+                                                    <p className={`text-xs font-black ${darkMode ? 'bg-black/40 text-[#8ecb84]' : 'bg-white text-[#2d5a27]'} px-2.5 py-1 rounded-lg ml-2`}>{meal.calories} kcal</p>
                                                 </div>
-                                                <div className="flex items-center gap-4 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                                                    <span className="flex items-center gap-1"><Zap size={10} className="text-[#8ecb84]"/> {meal.grams}g</span>
+                                                <div className="flex items-center gap-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                                    <span className="flex items-center gap-1"><Zap size={12} className="text-[#8ecb84]"/> {meal.grams}g</span>
                                                     {meal.sugar !== undefined && <span>· Sugar {meal.sugar}g</span>}
                                                 </div>
                                             </motion.div>
                                         ))}
                                         {(!currentDayPlan?.[type] || currentDayPlan[type].length === 0) && (
                                             <div className="py-10 text-center border-2 border-dashed border-white/10 rounded-3xl opacity-30">
-                                                <p className="text-[9px] font-black uppercase">No meals defined</p>
+                                                <p className="text-xs font-black uppercase">No meals defined</p>
                                             </div>
                                         )}
                                     </div>

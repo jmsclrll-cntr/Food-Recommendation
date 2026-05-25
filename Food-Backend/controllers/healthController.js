@@ -126,4 +126,67 @@ exports.updateHealthData = async (req, res) => {
         console.error("UPDATE ERROR:", error);
         return res.status(500).json({ error: error.message });
     }
+};
+
+/**
+ * Get weight logs history for a user sorted chronologically
+ */
+exports.getWeightHistory = async (req, res) => {
+    const db = admin.firestore();
+    try {
+        const { userId } = req.params;
+        const snapshot = await db.collection('weight_history')
+            .where('userId', '==', userId)
+            .get();
+
+        const logs = [];
+        snapshot.forEach(doc => {
+            logs.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Sort by createdAt ascending
+        logs.sort((a, b) => {
+            const timeA = a.createdAt ? (a.createdAt._seconds || new Date(a.createdAt).getTime() / 1000) : 0;
+            const timeB = b.createdAt ? (b.createdAt._seconds || new Date(b.createdAt).getTime() / 1000) : 0;
+            return timeA - timeB;
+        });
+
+        res.status(200).json(logs);
+    } catch (error) {
+        console.error("Get Weight History Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * Save a new weight checkpoint for tracking progress
+ */
+exports.saveWeightLog = async (req, res) => {
+    const db = admin.firestore();
+    try {
+        const { userId, weight, bmi } = req.body;
+        if (!userId || !weight) {
+            return res.status(400).json({ error: "userId and weight are required." });
+        }
+
+        const logDoc = {
+            userId,
+            weight: parseFloat(weight),
+            bmi: parseFloat(bmi) || 0,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        const docRef = await db.collection('weight_history').add(logDoc);
+        res.status(201).json({
+            message: "Weight log saved successfully.",
+            id: docRef.id,
+            ...logDoc
+        });
+    } catch (error) {
+        console.error("Save Weight Log Error:", error);
+        res.status(500).json({ error: error.message });
+    }
 };
