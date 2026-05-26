@@ -407,8 +407,15 @@ const GenerateWeekly = () => {
   };
 
   const renderIngredients = () => {
+    const emptyState = (
+      <div className="mt-6 border-t border-white/5 pt-6">
+        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#2d5a27] dark:text-[#5cb351] mb-3">Ingredients</p>
+        <p className="text-xs italic opacity-50">No ingredients listed for this meal.</p>
+      </div>
+    );
+
     const ing = viewingDetails?.ingredients;
-    if (!ing) return null;
+    if (!ing) return emptyState;
 
     let list = [];
     if (Array.isArray(ing)) {
@@ -427,7 +434,7 @@ const GenerateWeekly = () => {
 
     // Filter empty items
     list = list.filter(item =>  item && item.trim().length > 0);
-    if (list.length === 0) return null;
+    if (list.length === 0) return emptyState;
 
     return (
       <div className="mt-6 border-t border-white/5 pt-6">
@@ -968,12 +975,6 @@ const GenerateWeekly = () => {
                   {/* INGREDIENTS */}
                   {renderIngredients()}
 
-                  <button 
-                    onClick={() => setViewingDetails(null)}
-                    className="w-full py-4 bg-[#2d5a27] dark:bg-[#5cb351] text-white font-bold text-[9px] uppercase tracking-[0.3em] hover:bg-[#1c3a1c] dark:hover:bg-[#3d8a35] transition-all mt-8 clay-btn"
-                  >
-                    Close Protocol
-                  </button>
                 </div>
               </div>
             </motion.div>

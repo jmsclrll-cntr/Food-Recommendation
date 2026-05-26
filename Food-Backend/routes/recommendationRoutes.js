@@ -7,5 +7,6 @@ router.post('/generate-plan', recommendationController.getWeeklySuggestion);
 router.get('/alternatives', recommendationController.getAlternatives);
 router.get('/ingredients', recommendationController.getAllIngredients);
 router.get('/search-ingredients', recommendationController.searchIngredients);
+router.get('/foods', recommendationController.getAllFoods);
 
 module.exports = router;

@@ -7,6 +7,7 @@ const recommendationRoutes = require('./routes/recommendationRoutes');
 const healthRoutes = require('./routes/healthRoutes'); 
 const dietRoutes = require('./routes/dietRoutes'); 
 const { syncMLData } = require('./ml/mlDataService');
+const { startEmailScheduler } = require('./cron/emailScheduler');
 
 
 // --- FIREBASE INITIALIZATION (THIS WAS THE MISSING PART) ---
@@ -76,6 +77,10 @@ app.listen(PORT, async () => {
     try {
         await syncMLData(); 
         console.log(`✅ ML Knowledge Base is ready.`);
+        
+        // Start the email notification scheduler
+        startEmailScheduler();
+        console.log(`✅ Email Notification Scheduler is active.`);
         
         // Run database inspection preview on startup
         const { inspect } = require('./scripts/inspect_db');

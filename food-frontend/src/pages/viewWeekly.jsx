@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ArrowLeft, Calendar, Utensils, Zap, Loader2, Info, 
-    ChevronRight, ChevronLeft, Sun, Moon, CheckCircle2, Trash2
+    ChevronRight, ChevronLeft, Sun, Moon, CheckCircle2, X, Eye
 } from 'lucide-react';
 import axios from 'axios';
 import MissionCompleteSticker from '../components/MissionCompleteSticker';
@@ -17,6 +17,7 @@ const ViewWeekly = () => {
     const [weeklyPlan, setWeeklyPlan] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeDayIdx, setActiveDayIdx] = useState(0);
+    const [viewingDetails, setViewingDetails] = useState(null);
     const [darkMode, toggleDarkMode] = useDarkMode();
 
     const styles = getThemeStyles(darkMode);
@@ -24,6 +25,16 @@ const ViewWeekly = () => {
     
     const standardDays = DAYS;
     const [orderedDays, setOrderedDays] = useState(standardDays);
+
+    useEffect(() => {
+        if (orderedDays && orderedDays.length > 0) {
+            const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+            const todayIndex = orderedDays.indexOf(todayName);
+            if (todayIndex !== -1 && activeDayIdx !== todayIndex) {
+                setActiveDayIdx(todayIndex);
+            }
+        }
+    }, [orderedDays]);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -119,18 +130,79 @@ const ViewWeekly = () => {
         return totalItems > 0 && completedCount >= totalItems;
     };
 
+    // Render ingredients for the selected detailed view
+   const renderIngredients = () => {
+        const ing = viewingDetails?.ingredients;
+        if (!ing) return null;
+
+        let list = [];
+        if (Array.isArray(ing)) {
+            list = ing;
+        } else if (typeof ing === 'string') {
+            if (ing.trim().startsWith('[') && ing.trim().endsWith(']')) {
+                try {
+                    list = JSON.parse(ing);
+                } catch (e) {
+                    list = ing.split(',').map(x => x.trim());
+                }
+            } else {
+                list = ing.split(',').map(x => x.trim());
+            }
+        }
+
+        list = list.filter(item => item && item.trim().length > 0);
+        if (list.length === 0) return null;
+
+        return (
+            <div className="mt-6 border-t border-white/5 pt-6">
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#2d5a27] dark:text-[#5cb351] mb-3">Ingredients</p>
+                <div className="flex flex-wrap gap-2">
+                    {list.map((item, idx) => (
+                        <span 
+                            key={idx} 
+                            className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border ${
+                                darkMode 
+                                    ? 'bg-white/5 border-white/10 text-white/80' 
+                                    : 'bg-[#f5faf4] border-[#2d5a27]/10 text-[#2d5a27]'
+                            } transition-colors`}
+                        >
+                            {item}
+                        </span>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+ 
+
+
+
+    const getImageUrl = (url) => {
+        if (!url) return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=1000';
+        try {
+            if (url.includes('imgurl=') || url.includes('url=') || url.includes('q=')) {
+                const urlObj = new URL(url);
+                const imgUrl = urlObj.searchParams.get('imgurl') || urlObj.searchParams.get('url') || urlObj.searchParams.get('q');
+                if (imgUrl) {
+                    let decoded = decodeURIComponent(imgUrl);
+                    if (!decoded.startsWith('http://') && !decoded.startsWith('https://')) decoded = 'https://' + decoded;
+                    return decoded;
+                }
+            }
+        } catch (e) {}
+        return url;
+    };
+
     return (
         <div className={`h-screen w-full ${bgMain} ${textMain} p-10 flex flex-col overflow-hidden transition-colors duration-500`}>
             
-            {/* Header */}
             <header className="flex justify-between items-center mb-10 flex-shrink-0 relative z-50">
                 <div className="flex items-center gap-6">
                     <button onClick={() => navigate('/dashboard')} className={`p-3 ${cardBg} rounded-full border ${border} hover:border-[#2d5a27] transition-all group`}>
                         <ArrowLeft size={18} className={`group-hover:text-[#2d5a27] ${darkMode ? 'text-white' : 'text-black'}`} />
                     </button>
                     <div>
-                        <h1 className="font-serif text-3xl italic">Weekly Protocol</h1>
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6a9966]">Comprehensive Nutrition Overview</p>
+                        <h1 className="font-serif text-3xl italic">Weekly Diet</h1>
                     </div>
                 </div>
 
@@ -144,17 +216,6 @@ const ViewWeekly = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Delete Plan */}
-                        <button
-                            className={`p-3 rounded-xl backdrop-blur-md transition-all ${
-                                darkMode ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
-                            }`}
-                            title="Delete Weekly Plan"
-                        >
-                            <Trash2 size={18} />
-                        </button>
-
-                        {/* Dark Mode Toggle */}
                         <button
                             onClick={toggleDarkMode}
                             className={`p-3 rounded-xl backdrop-blur-md transition-all ${
@@ -168,12 +229,12 @@ const ViewWeekly = () => {
             </header>
 
             <div className="flex-1 grid grid-cols-12 gap-8 min-h-0">
-                <div className="col-span-3 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="col-span-2 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
                     {orderedDays.map((day, idx) => (
                         <button 
                             key={day} 
                             onClick={() => setActiveDayIdx(idx)}
-                            className={`w-full p-6 transition-all text-left flex items-center justify-between group relative overflow-visible clay-btn
+                            className={`w-full p-4 transition-all text-left flex items-center justify-between group relative overflow-visible clay-btn
                                 ${activeDayIdx === idx 
                                     ? 'bg-[#1c3a1c] text-white scale-105' 
                                     : `${cardBg} hover:border-[#2d5a27]`}`}
@@ -192,8 +253,7 @@ const ViewWeekly = () => {
                     ))}
                 </div>
 
-                {/* Day Details View */}
-                <div className={`${cardBg} col-span-9 flex flex-col overflow-hidden relative transition-colors clay-card`}>
+                <div className={`${cardBg} col-span-10 flex flex-col overflow-hidden relative transition-colors clay-card`}>
                     <div className={`p-10 border-b ${border} flex justify-between items-center ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
                         <div className="flex items-center gap-4 relative">
                             <div className="w-12 h-12 bg-[#2d5a27] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#2d5a27]/20">
@@ -228,15 +288,27 @@ const ViewWeekly = () => {
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 key={mIdx} 
-                                                className={`${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'} p-5 group hover:border-[#8ecb84] transition-all clay-card`}
+                                                onClick={() => setViewingDetails(meal)}
+                                                className="border min-h-[280px] p-6 flex flex-col gap-4 group/item transition-all rounded-xl relative overflow-hidden shadow-lg border-white/10 cursor-pointer"
                                             >
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <p className={`text-sm font-bold leading-tight flex-1 ${textMain}`}>{meal.name}</p>
-                                                    <p className={`text-xs font-black ${darkMode ? 'bg-black/40 text-[#8ecb84]' : 'bg-white text-[#2d5a27]'} px-2.5 py-1 rounded-lg ml-2`}>{meal.calories} kcal</p>
-                                                </div>
-                                                <div className="flex items-center gap-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                                                    <span className="flex items-center gap-1"><Zap size={12} className="text-[#8ecb84]"/> {meal.grams}g</span>
-                                                    {meal.sugar !== undefined && <span>· Sugar {meal.sugar}g</span>}
+                                                <div 
+                                                    className="absolute inset-0 z-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-110"
+                                                    style={{ backgroundImage: `url('${getImageUrl(meal.imageUrl || meal.imageURL || meal.image || meal.imagePath)}')` }}
+                                                />
+                                                <div className="absolute inset-0 z-0 bg-black/40 group-hover:bg-black/30 transition-colors duration-300" />
+                                                <div className="flex-1 relative z-10 flex flex-col justify-end">
+                                                    <span className="text-base font-black block mb-1 leading-tight text-white drop-shadow-sm">{meal.name}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{meal.calories} kcal</span>
+                                                        <span className="w-1 h-1 rounded-full bg-[#5cb351]"></span>
+                                                        <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{meal.grams}g</span>
+                                                        {meal.sugar !== undefined && (
+                                                            <>
+                                                                <span className="w-1 h-1 rounded-full bg-[#5cb351]"></span>
+                                                                <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">Sugar {meal.sugar}g</span>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </motion.div>
                                         ))}
@@ -254,6 +326,82 @@ const ViewWeekly = () => {
             </div>
 
             <style dangerouslySetInnerHTML={{ __html: `.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #6a9966; border-radius: 10px; }` }} />
+
+            <AnimatePresence>
+                {viewingDetails && (
+                    <motion.div 
+                        initial={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="fixed inset-0 z-[400] bg-black/80 flex items-center justify-center p-6"
+                        onClick={() => setViewingDetails(null)}
+                    >
+                        <motion.div 
+                            initial={{ opacity: 0, y: 24 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 16 }}
+                            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                            className={`${cardBg} w-full max-w-4xl overflow-hidden relative clay-card`}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex flex-col md:flex-row h-full">
+                                <div className="md:w-[55%] h-80 md:h-auto bg-gray-100 overflow-hidden relative">
+                                    <img 
+                                        src={getImageUrl(viewingDetails.imageUrl || viewingDetails.imageURL || viewingDetails.image || viewingDetails.imagePath)} 
+                                        alt={viewingDetails.name}
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-8">
+                                        <h2 className="font-serif text-3xl italic text-white">{viewingDetails.name}</h2>
+                                    </div>
+                                </div>
+                                <div className="md:w-[45%] p-8 overflow-y-auto max-h-[85vh] custom-scrollbar">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div>
+                                            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#2d5a27] dark:text-[#5cb351] mb-1">Nutritional Analysis</p>
+                                            <p className={`text-xs ${textSub} italic`}>Organic Recommendation</p>
+                                        </div>
+                                        <button onClick={() => setViewingDetails(null)} className={`p-2 rounded-xl ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'} clay-btn`}><X size={18}/></button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-8">
+                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'} border ${border}`}>
+                                            <p className="text-[8px] font-black uppercase text-[#2d5a27] dark:text-[#5cb351] mb-1">Energy</p>
+                                            <p className="text-xl font-serif italic text-[#2d5a27] dark:text-[#5cb351]">{viewingDetails.calories} <span className="text-[10px] not-italic font-bold opacity-40">kcal</span></p>
+                                        </div>
+                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'} border ${border}`}>
+                                            <p className="text-[8px] font-black uppercase text-[#2d5a27] dark:text-[#5cb351] mb-1">Portion</p>
+                                            <p className="text-xl font-serif italic text-[#2d5a27] dark:text-[#5cb351]">{viewingDetails.grams} <span className="text-[10px] not-italic font-bold opacity-40">g</span></p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {[
+                                            { label: 'Protein', value: viewingDetails.protein, unit: 'g' },
+                                            { label: 'Carbs', value: viewingDetails.carbs || viewingDetails.carbohydrates, unit: 'g' },
+                                            { label: 'Fats', value: viewingDetails.fat || viewingDetails.saturatedFat, unit: 'g' },
+                                            { label: 'Sugar', value: viewingDetails.sugar, unit: 'g' },
+                                            { label: 'Sodium', value: viewingDetails.sodium, unit: 'mg' },
+                                            { label: 'Fiber', value: viewingDetails.fiber, unit: 'g' },
+                                        ]
+                                        .filter(n => n.value !== undefined && n.value !== null)
+                                        .map((n, i) => (
+                                            <div key={i} className="flex justify-between items-center py-2 border-b border-white/5">
+                                                <span className={`text-[10px] font-bold uppercase tracking-widest ${textSub}`}>{n.label}</span>
+                                                <span className="text-xs font-bold">{n.value}{n.unit}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {renderIngredients()}
+
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

@@ -58,6 +58,15 @@ exports.getAllIngredients = async (req, res) => {
     }
 };
 
+exports.getAllFoods = async (req, res) => {
+    try {
+        const foods = await getFoodDatabase([]);
+        res.status(200).json(foods);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 exports.searchIngredients = async (req, res) => {
     try {
         const query = req.query.q || '';

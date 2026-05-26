@@ -32,23 +32,92 @@ const itemVariants = {
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // ─── Helpers ──────────────────────────────────────────────
-const calcWeekTotals = (plan) => {
+
+// Estimate macros from calories using standard dietary energy ratios
+// as a last-resort fallback for old/seeded data that has no macro fields.
+// Ratios: Protein 22% (4 cal/g), Carbs 52% (4 cal/g), Fat 26% (9 cal/g)
+const estimateMacrosFromCalories = (calories) => {
+    if (!calories || calories <= 0) return { protein: 0, carbs: 0, fat: 0, sodium: 0, sugar: 0 };
+    return {
+        protein: Math.round((calories * 0.22) / 4),
+        carbs:   Math.round((calories * 0.52) / 4),
+        fat:     Math.round((calories * 0.26) / 9),
+        sodium:  Math.round(calories * 1.8),          // ~180 mg per 100 kcal
+        sugar:   Math.round((calories * 0.08) / 4),   // ~8% of calories from sugar
+    };
+};
+
+// Cross-reference a food item against the full food database.
+// Priority: 1) use stored field, 2) match from DB, 3) estimate from calories
+const lookupFoodMacros = (item, allFoods) => {
+    const cal = item.calories || 0;
+
+    // If the item already has complete macro data, return as-is
+    if (item.protein != null && item.carbs != null && item.fat != null && item.sodium != null) {
+        return item;
+    }
+
+    // Try to find a name match in the food database
+    if (allFoods && allFoods.length > 0) {
+        const itemName = (item.name || item.foodName || '').toLowerCase().trim();
+        if (itemName) {
+            const match = allFoods.find(f => {
+                const fname = (f.name || f.foodName || '').toLowerCase().trim();
+                return fname === itemName || fname.includes(itemName) || itemName.includes(fname);
+            });
+            if (match) {
+                const estimated = estimateMacrosFromCalories(cal);
+                return {
+                    calories: item.calories  ?? match.calories  ?? 0,
+                    sugar:    item.sugar     ?? match.sugar     ?? estimated.sugar,
+                    grams:    item.grams     ?? match.grams     ?? match.servingSize ?? 0,
+                    protein:  item.protein   ?? match.protein   ?? estimated.protein,
+                    carbs:    item.carbs     ?? match.carbs     ?? match.carbohydrates ?? estimated.carbs,
+                    fat:      item.fat       ?? match.fat       ?? match.saturatedFat  ?? estimated.fat,
+                    sodium:   item.sodium    ?? match.sodium    ?? estimated.sodium,
+                    name:     item.name || match.name || '',
+                };
+            }
+        }
+    }
+
+    // Fallback: estimate all missing macros from calories
+    const estimated = estimateMacrosFromCalories(cal);
+    return {
+        calories: cal,
+        sugar:    item.sugar   ?? estimated.sugar,
+        grams:    item.grams   ?? 0,
+        protein:  item.protein ?? estimated.protein,
+        carbs:    item.carbs   ?? estimated.carbs,
+        fat:      item.fat     ?? estimated.fat,
+        sodium:   item.sodium  ?? estimated.sodium,
+        name:     item.name || '',
+    };
+};
+
+const calcWeekTotals = (plan, allFoods = []) => {
     let calories = 0, sugar = 0, grams = 0, mealCount = 0;
-    if (!plan) return { calories, sugar, grams, mealCount };
+    let protein = 0, carbs = 0, fat = 0, sodium = 0;
+    if (!plan) return { calories, sugar, grams, mealCount, protein, carbs, fat, sodium };
     DAYS.forEach(day => {
         const meals = plan[day];
         if (meals) {
             ['breakfast', 'lunch', 'dinner'].forEach(type => {
-                (meals[type] || []).forEach(item => {
+                (meals[type] || []).forEach(rawItem => {
+                    const item = lookupFoodMacros(rawItem, allFoods);
                     calories += (item.calories || 0);
-                    sugar += (item.sugar || 0);
-                    grams += (item.grams || 0);
+                    sugar    += (item.sugar    || 0);
+                    grams    += (item.grams    || 0);
                     mealCount++;
+                    protein  += (item.protein  || 0);
+                    carbs    += (item.carbs    || rawItem.carbohydrates || 0);
+                    fat      += (item.fat      || rawItem.saturatedFat  || 0);
+                    sodium   += (item.sodium   || 0);
                 });
             });
         }
     });
-    return { calories, sugar, grams, mealCount };
+    return { calories, sugar, grams, mealCount, protein, carbs, fat, sodium };
 };
 
 const calcDailyAvg = (total, days = 7) => Math.round(total / days);
@@ -95,7 +164,8 @@ const ViewHistory = () => {
     const [archivedPlansData, setArchivedPlansData] = useState([]);
     const [healthProfile, setHealthProfile] = useState(null);
     const [weightHistory, setWeightHistory] = useState([]);
-    const [activeMetric, setActiveMetric] = useState('calories'); // 'calories', 'weight', 'adherence', 'sugar'
+    const [allFoods, setAllFoods] = useState([]);
+    const [activeMetric, setActiveMetric] = useState('calories'); // 'calories', 'weight', 'protein', 'carbs', 'fat', 'sodium', 'sugar'
     const [hoveredPoint, setHoveredPoint] = useState(null);
     
     const styles = getThemeStyles(darkMode);
@@ -172,12 +242,13 @@ const ViewHistory = () => {
                 const uid = user.id || user.uid || user._id;
                 setUserId(uid);
 
-                // Fetch all data in parallel
-                const [activeRes, historyRes, healthRes, weightRes] = await Promise.allSettled([
+                // Fetch all data in parallel (including food database for macro cross-referencing)
+                const [activeRes, historyRes, healthRes, weightRes, foodsRes] = await Promise.allSettled([
                     axios.get(`http://localhost:5000/api/diets/weekly/${uid}`),
                     axios.get(`http://localhost:5000/api/diets/history/${uid}`),
                     axios.get(`http://localhost:5000/api/health/${uid}`),
-                    axios.get(`http://localhost:5000/api/health/weight-history/${uid}`)
+                    axios.get(`http://localhost:5000/api/health/weight-history/${uid}`),
+                    axios.get('http://localhost:5000/api/recommendations/foods')
                 ]);
 
                 let activePlan = null;
@@ -198,6 +269,13 @@ const ViewHistory = () => {
 
                 if (weightRes.status === 'fulfilled' && Array.isArray(weightRes.value.data)) {
                     setWeightHistory(weightRes.value.data);
+                }
+
+                // Store the full food database for macro cross-referencing
+                if (foodsRes.status === 'fulfilled' && Array.isArray(foodsRes.value.data)) {
+                    setAllFoods(foodsRes.value.data);
+                } else {
+                    console.warn('Could not load food database for macro cross-reference. Macros may show as 0.');
                 }
 
                 // Assemble timeline
@@ -267,10 +345,12 @@ const ViewHistory = () => {
     }, [activePlanData, archivedPlansData]);
 
     // Per-week overview data: biometrics + nutrition totals
+    // allFoods is used to cross-reference each meal item against the database
+    // to fill in any missing macro values (protein, carbs, fat, sodium).
     const weekOverviews = useMemo(() => {
         return history.map(week => {
             const plan = planDataMap[week.id];
-            const totals = calcWeekTotals(plan);
+            const totals = calcWeekTotals(plan, allFoods);
             const timestamp = getTimestamp(week.savedAt);
             const weightEntry = findClosestWeight(weightHistory, timestamp);
 
@@ -291,7 +371,7 @@ const ViewHistory = () => {
                 activity: healthProfile?.activity || null
             };
         });
-    }, [history, planDataMap, weightHistory, healthProfile]);
+    }, [history, planDataMap, weightHistory, healthProfile, allFoods]);
 
     const chronologicalWeeks = useMemo(() => {
         return [...weekOverviews].reverse();
@@ -516,7 +596,7 @@ const ViewHistory = () => {
                         <ArrowLeft size={18} className={`group-hover:text-[#2d5a27] ${darkMode ? 'text-white' : 'text-black'}`} />
                     </button>
                     <div>
-                        <h1 className="font-serif text-3xl italic">Diet History</h1>
+                        <h1 className="font-sans text-3xl font-bold tracking-tight">Diet History</h1>
                         <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6a9966]">Weekly Overviews · Biometrics · Insights</p>
                     </div>
                 </div>
@@ -547,99 +627,6 @@ const ViewHistory = () => {
 
             <div className="flex-1 max-w-6xl mx-auto w-full space-y-10">
 
-                {/* ════════ ACHIEVEMENTS & STREAK SUMMARY ════════ */}
-                <motion.div 
-                    variants={itemVariants}
-                    className={`${cardBg} rounded-2xl border ${border} p-6 md:p-8 relative overflow-hidden backdrop-blur-xl shadow-xl transition-all duration-500`}
-                >
-                    <div className="absolute top-0 right-0 w-80 h-80 bg-[#8ecb84]/5 rounded-full blur-3xl pointer-events-none" />
-                    
-                    <div className="flex flex-col lg:flex-row items-center justify-between gap-8 relative z-10">
-                        {/* Left Side: Current Streak & Tier */}
-                        <div className="flex items-center gap-6 flex-1 w-full">
-                            <div className="relative w-24 h-24 flex items-center justify-center rounded-2xl border bg-black/15 border-white/5 shadow-inner">
-                                <motion.div
-                                    animate={{ scale: [1, 1.1, 1] }}
-                                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-                                    className="text-5xl select-none"
-                                >
-                                    {activeTier.icon}
-                                </motion.div>
-                                <div className="absolute -inset-0.5 rounded-2xl opacity-30 blur-md pointer-events-none" style={{ background: activeTier.glow }} />
-                            </div>
-                            
-                            <div className="flex-1">
-                                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-[#6a9966] block mb-1">
-                                    Current Achievement Tier
-                                </span>
-                                <h3 className="font-serif text-3xl italic font-bold mb-1 flex items-center gap-2" style={{ color: activeTier.color }}>
-                                    {activeTier.label} Status
-                                    <Sparkles size={18} className="text-[#f5c842] animate-pulse" />
-                                </h3>
-                                <p className={`text-xs font-semibold leading-relaxed ${textSub}`}>
-                                    {activeTier.sub} You have completed a total of <span className="font-bold text-[#8ecb84] text-sm">{completedDays} day{completedDays !== 1 ? 's' : ''}</span> of diet protocols.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Right Side: Milestones Horizontal Checklist */}
-                        <div className="flex-1 w-full">
-                            <div className="flex justify-between items-center mb-3">
-                                <span className={`text-[9px] font-black uppercase tracking-wider ${textSub}`}>Streak Progression</span>
-                                <span className="text-xs font-black uppercase tracking-wider text-[#8ecb84]">
-                                    {completedDays} / {activeTier.nextReq} Days
-                                </span>
-                            </div>
-                            
-                            {/* Progress bar */}
-                            <div className={`w-full h-2.5 rounded-full overflow-hidden border mb-6 relative ${darkMode ? 'bg-white/5 border-white/10' : 'bg-black/5 border-[#ddd8ce]'}`}>
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${Math.min(100, Math.round((completedDays / activeTier.nextReq) * 100))}%` }}
-                                    transition={{ duration: 1, ease: "easeOut" }}
-                                    className="h-full rounded-full"
-                                    style={{
-                                        backgroundColor: activeTier.color,
-                                        boxShadow: `0 0 12px ${activeTier.color}60`
-                                    }}
-                                />
-                            </div>
-
-                            {/* Badge milestones */}
-                            <div className="grid grid-cols-6 gap-2">
-                                {[
-                                    { label: 'Beginner', req: 0, icon: '🌱', color: '#8ecb84' },
-                                    { label: 'Committed', req: 3, icon: '🎗️', color: '#cd7f32' },
-                                    { label: 'Consistent', req: 7, icon: '🥉', color: '#a8d8ea' },
-                                    { label: 'Dedicated', req: 14, icon: '🥈', color: '#f5c842' },
-                                    { label: 'Champion', req: 21, icon: '🥇', color: '#e5e4e2' },
-                                    { label: 'Legendary', req: 30, icon: '🏆', color: '#b9f2ff' }
-                                ].map((badge, idx) => {
-                                    const isUnlocked = completedDays >= badge.req;
-                                    return (
-                                        <div 
-                                            key={idx}
-                                            className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all duration-300 ${
-                                                isUnlocked
-                                                    ? `${darkMode ? 'bg-white/[0.04]' : 'bg-black/[0.02]'} border-white/10 text-white shadow-sm`
-                                                    : 'opacity-30 border-dashed border-white/5 text-gray-500 shadow-none'
-                                            }`}
-                                            title={`${badge.label}: Requires ${badge.req} Days`}
-                                        >
-                                            <span className={`text-xl ${isUnlocked ? 'scale-100' : 'scale-90 grayscale'}`}>
-                                                {isUnlocked ? badge.icon : '🔒'}
-                                            </span>
-                                            <span className="text-[8px] font-black uppercase tracking-tighter truncate w-full text-center" style={{ color: isUnlocked ? badge.color : undefined }}>
-                                                {badge.label}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                </motion.div>
-
                 {/* ════════ PROGRESS CHART ════════ */}
                 {chronologicalWeeks.length > 0 && (
                     <motion.div 
@@ -648,11 +635,19 @@ const ViewHistory = () => {
                     >
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                             <div>
-                                <h2 className="font-serif text-2xl italic flex items-center gap-2">
+                                <h2 className="font-sans text-2xl font-bold tracking-tight flex items-center gap-2">
                                     <TrendingUp size={20} className="text-[#8ecb84]" />
                                     Progress Timeline
                                 </h2>
-                                <p className="text-xs text-gray-400 mt-1 uppercase tracking-wider font-bold">Week-to-Week Comparison Graph</p>
+                                <p className="text-xs text-gray-400 mt-1 uppercase tracking-wider font-bold">
+                                     {activeMetric === 'calories' ? 'Weekly Total Calories vs Target' :
+                                      activeMetric === 'weight' ? 'Weekly Body Weight (kg)' :
+                                      activeMetric === 'protein' ? 'Weekly Total Protein (g)' :
+                                      activeMetric === 'carbs' ? 'Weekly Total Carbs (g)' :
+                                      activeMetric === 'fat' ? 'Weekly Total Fat (g)' :
+                                      activeMetric === 'sodium' ? 'Weekly Total Sodium (mg)' :
+                                      'Weekly Total Sugar Intake (g)'}
+                                </p>
                             </div>
                             
                             {/* Metric Tabs */}
@@ -660,7 +655,10 @@ const ViewHistory = () => {
                                 {[
                                     { id: 'calories', label: 'Calories' },
                                     { id: 'weight', label: 'Weight' },
-                                    { id: 'adherence', label: 'Adherence' },
+                                    { id: 'protein', label: 'Protein' },
+                                    { id: 'carbs', label: 'Carbs' },
+                                    { id: 'fat', label: 'Fat' },
+                                    { id: 'sodium', label: 'Sodium' },
                                     { id: 'sugar', label: 'Sugar' }
                                 ].map(tab => (
                                     <button
@@ -692,11 +690,21 @@ const ViewHistory = () => {
                             
                             const getMetricValue = (week, metric) => {
                                 switch (metric) {
-                                    case 'calories': return week.dailyAvgCal || 0;
+                                    case 'calories': return week.totals.calories || 0;
                                     case 'weight': return week.weight || 0;
-                                    case 'adherence': return week.completion || 0;
-                                    case 'sugar': return week.totals.sugar || 0;
+                                    case 'protein': return Math.round(week.totals.protein || 0);
+                                    case 'carbs': return Math.round(week.totals.carbs || 0);
+                                    case 'fat': return Math.round(week.totals.fat || 0);
+                                    case 'sodium': return Math.round(week.totals.sodium || 0);
+                                    case 'sugar': return Math.round(week.totals.sugar || 0);
                                     default: return 0;
+                                }
+                            };
+                            
+                            const getMetricTarget = (week, metric) => {
+                                switch (metric) {
+                                    case 'calories': return week.targetCalories ? Math.round(week.targetCalories * 7) : null;
+                                    default: return null;
                                 }
                             };
                             
@@ -704,7 +712,10 @@ const ViewHistory = () => {
                                 switch (metric) {
                                     case 'calories': return ' kcal';
                                     case 'weight': return ' kg';
-                                    case 'adherence': return '%';
+                                    case 'protein': return ' g';
+                                    case 'carbs': return ' g';
+                                    case 'fat': return ' g';
+                                    case 'sodium': return ' mg';
                                     case 'sugar': return 'g';
                                     default: return '';
                                 }
@@ -714,24 +725,26 @@ const ViewHistory = () => {
                                 switch (metric) {
                                     case 'calories': return '#ff7b72';
                                     case 'weight': return '#8ecb84';
-                                    case 'adherence': return '#f5c842';
+                                    case 'protein': return '#ffb088';
+                                    case 'carbs': return '#ffd166';
+                                    case 'fat': return '#ef476f';
+                                    case 'sodium': return '#118ab2';
                                     case 'sugar': return '#6ab8ff';
                                     default: return '#8ecb84';
                                 }
                             };
 
-                            const vals = chronologicalWeeks.map(w => getMetricValue(w, activeMetric));
-                            let minVal = Math.min(...vals);
-                            let maxVal = Math.max(...vals);
+                            const vals = chronologicalWeeks.flatMap(w => {
+                                const v = getMetricValue(w, activeMetric);
+                                const t = getMetricTarget(w, activeMetric);
+                                return t !== null ? [v, t] : [v];
+                            });
                             
-                            if (minVal === maxVal) {
-                                minVal = Math.max(0, minVal - 10);
-                                maxVal = maxVal + 10;
-                            } else {
-                                const range = maxVal - minVal;
-                                minVal = Math.max(0, minVal - range * 0.15);
-                                maxVal = maxVal + range * 0.15;
-                            }
+                            let maxVal = Math.max(...vals, 0);
+                            let minVal = 0; // Bar chart baseline must be 0 for visual accuracy
+                            
+                            if (maxVal === 0) maxVal = 10;
+                            else maxVal = maxVal + maxVal * 0.15; // 15% headroom
 
                             const yCoord = (val) => height - paddingBottom - ((val - minVal) / (maxVal - minVal)) * (height - paddingBottom - paddingTop);
                             const xStep = N > 1 ? (width - paddingLeft - paddingRight) / (N - 1) : 0;
@@ -739,8 +752,10 @@ const ViewHistory = () => {
                             const points = chronologicalWeeks.map((week, idx) => {
                                 const x = N > 1 ? paddingLeft + idx * xStep : (width - paddingLeft - paddingRight) / 2 + paddingLeft;
                                 const val = getMetricValue(week, activeMetric);
+                                const target = getMetricTarget(week, activeMetric);
                                 const y = yCoord(val);
-                                return { x, y, val, label: week.week, date: week.date };
+                                const targetY = target !== null ? yCoord(target) : null;
+                                return { x, y, val, target, targetY, label: week.week, date: week.date };
                             });
 
                             let linePath = "";
@@ -782,6 +797,7 @@ const ViewHistory = () => {
                                     x: pt.x,
                                     y: pt.y,
                                     val: pt.val,
+                                    target: pt.target,
                                     label: pt.label,
                                     date: pt.date
                                 });
@@ -826,28 +842,43 @@ const ViewHistory = () => {
                                             </filter>
                                         </defs>
 
-                                        {/* Grid Lines */}
+                                        {/* Grid Lines — solid, subtle */}
                                         {gridLines.map((line, i) => (
-                                            <g key={i} className="opacity-15">
-                                                <line 
-                                                    x1={paddingLeft} 
-                                                    y1={line.y} 
-                                                    x2={width - paddingRight} 
-                                                    y2={line.y} 
-                                                    stroke={darkMode ? 'white' : 'black'} 
-                                                    strokeWidth={1}
-                                                    strokeDasharray="4 4"
-                                                />
+                                            <g key={i}>
+                                                {/* Only draw line for non-zero grid lines (skip the baseline, handled by axis) */}
+                                                {i > 0 && (
+                                                    <line
+                                                        x1={paddingLeft}
+                                                        y1={line.y}
+                                                        x2={width - paddingRight}
+                                                        y2={line.y}
+                                                        stroke={darkMode ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}
+                                                        strokeWidth={1}
+                                                    />
+                                                )}
                                                 <text
-                                                    x={paddingLeft - 10}
+                                                    x={paddingLeft - 8}
                                                     y={line.y + 4}
                                                     textAnchor="end"
-                                                    className={`text-[10px] font-bold ${darkMode ? 'fill-white' : 'fill-black'}`}
+                                                    fill={darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+                                                    fontSize="10"
+                                                    fontWeight="600"
                                                 >
                                                     {Math.round(line.val)}
                                                 </text>
                                             </g>
                                         ))}
+
+                                        {/* Bottom Axis Line */}
+                                        <line
+                                            x1={paddingLeft}
+                                            y1={height - paddingBottom}
+                                            x2={width - paddingRight}
+                                            y2={height - paddingBottom}
+                                            stroke={darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}
+                                            strokeWidth={1}
+                                        />
+
 
                                         {/* X Axis Labels */}
                                         {points.map((p, i) => (
@@ -862,53 +893,48 @@ const ViewHistory = () => {
                                                         : darkMode ? 'fill-white/40' : 'fill-black/40'
                                                 }`}
                                             >
-                                                {p.label.split(' ')[0]}
+                                                {p.label}
                                             </text>
                                         ))}
 
-                                        {/* Gradient Area Below Curve */}
-                                        {areaPath && (
-                                            <path d={areaPath} fill="url(#areaGradient)" />
-                                        )}
-
-                                        {/* Curve */}
-                                        {linePath && (
-                                            <path 
-                                                d={linePath} 
-                                                fill="none" 
-                                                stroke={activeColor} 
-                                                strokeWidth={3} 
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                filter="url(#glow)"
-                                            />
-                                        )}
-
-                                        {/* Data Markers */}
+                                        {/* Bar Chart */}
                                         {points.map((p, i) => {
                                             const isHovered = hoveredPoint?.index === i;
+                                            const barWidth = N > 1 ? (xStep * 0.5) : 60;
+                                            const barX = p.x - barWidth / 2;
+                                            const barHeight = Math.max(0, (height - paddingBottom) - p.y);
                                             return (
                                                 <g key={i}>
-                                                    <circle
-                                                        cx={p.x}
-                                                        cy={p.y}
-                                                        r={isHovered ? 6 : 4}
-                                                        fill={isHovered ? '#fff' : activeColor}
-                                                        stroke={activeColor}
-                                                        strokeWidth={isHovered ? 4 : 2}
+                                                    {/* Background Bar for Hover Effect */}
+                                                    <rect
+                                                        x={barX}
+                                                        y={paddingTop}
+                                                        width={barWidth}
+                                                        height={height - paddingBottom - paddingTop}
+                                                        fill={darkMode ? 'white' : 'black'}
+                                                        opacity={isHovered ? 0.05 : 0}
+                                                        rx={4}
+                                                        ry={4}
                                                     />
-                                                    {isHovered && (
-                                                        <line
-                                                            x1={p.x}
-                                                            y1={p.y}
-                                                            x2={p.x}
-                                                            y2={height - paddingBottom}
-                                                            stroke={activeColor}
-                                                            strokeWidth={1}
-                                                            strokeDasharray="2 2"
-                                                            className="opacity-50"
-                                                        />
-                                                    )}
+                                                    {/* Value Bar */}
+                                                    <rect
+                                                        x={barX}
+                                                        y={p.y}
+                                                        width={barWidth}
+                                                        height={barHeight}
+                                                        fill={activeColor}
+                                                        opacity={isHovered ? 1 : 0.8}
+                                                        rx={6}
+                                                        ry={6}
+                                                    />
+                                                    <text
+                                                        x={p.x}
+                                                        y={p.y - 10}
+                                                        textAnchor="middle"
+                                                        className={`text-[12px] font-bold ${darkMode ? 'fill-white' : 'fill-black'}`}
+                                                    >
+                                                        {p.val}
+                                                    </text>
                                                 </g>
                                             );
                                         })}
@@ -945,6 +971,11 @@ const ViewHistory = () => {
                                                     />
                                                     {hoveredPoint.val.toLocaleString()}{activeUnit}
                                                 </span>
+                                                {hoveredPoint.target !== null && (
+                                                    <span className="text-[10px] text-gray-500 font-bold leading-none mt-1">
+                                                        Target: {hoveredPoint.target.toLocaleString()}{activeUnit}
+                                                    </span>
+                                                )}
                                                 <span className="text-[9px] text-gray-400 font-semibold mt-1">
                                                     {hoveredPoint.date}
                                                 </span>
@@ -961,19 +992,20 @@ const ViewHistory = () => {
                 <motion.div variants={itemVariants}>
                     <div className="flex items-center gap-3 mb-6">
                         <CalendarDays size={18} className="text-[#8ecb84]" />
-                        <h2 className="font-serif text-2xl italic">Weekly Overviews</h2>
+                        <h2 className="font-sans text-2xl font-bold tracking-tight">Weekly Overviews</h2>
                     </div>
 
                     {history.length === 0 ? (
                         <div className={`${cardBg} rounded-2xl border ${border} p-16 text-center`}>
                             <HistoryIcon size={48} className={`mx-auto mb-4 ${textSub}`} />
-                            <h3 className="font-serif text-xl italic mb-2">No History Yet</h3>
+                            <h3 className="font-sans text-xl font-bold tracking-tight mb-2">No History Yet</h3>
                             <p className={`text-sm ${textSub}`}>Complete a weekly plan to see your progress tracked here.</p>
                         </div>
                     ) : (
                         <div className="space-y-5">
                             {weekOverviews.map((week, index) => {
                                 const isExpanded = expandedWeek === week.id;
+                                const cmp = comparisons.find(c => c.newer.id === week.id);
                                 return (
                                     <motion.div
                                         key={week.id}
@@ -989,7 +1021,7 @@ const ViewHistory = () => {
                                                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: week.color }} />
                                                 <div>
                                                     <div className="flex items-center gap-3">
-                                                        <h3 className="font-serif text-xl italic">{week.week}</h3>
+                                                        <h3 className="font-sans text-xl font-bold tracking-tight">{week.week}</h3>
                                                         <span className="text-xs font-bold uppercase px-3 py-1 rounded-full"
                                                             style={{ backgroundColor: `${week.color}20`, color: darkMode ? week.color : '#2d5a27' }}>
                                                             {week.status}
@@ -1160,6 +1192,44 @@ const ViewHistory = () => {
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                        {cmp && (
+                                                            <div className={`mt-5 pt-5 border-t ${border}`}>
+                                                                <div className="flex items-center justify-between mb-3">
+                                                                    <p className="text-xs font-black uppercase tracking-wider text-[#f5c842]">Comparison vs Previous Week</p>
+                                                                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                                                        cmp.trajectory === 'improving' 
+                                                                            ? darkMode ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
+                                                                            : cmp.trajectory === 'declining'
+                                                                            ? darkMode ? 'bg-orange-500/15 text-orange-400' : 'bg-orange-50 text-orange-700'
+                                                                            : darkMode ? 'bg-white/10 text-white/60' : 'bg-black/5 text-black/50'
+                                                                    }`}>
+                                                                        {cmp.trajectory === 'improving' ? '↑ Improving' : cmp.trajectory === 'declining' ? '↓ Needs Attention' : '— Stable'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                                                    <div className={`p-3 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
+                                                                        <p className={`text-[10px] font-bold uppercase ${textSub} mb-1`}>Weight Diff</p>
+                                                                        <DiffBadge value={cmp.weightDiff} unit="kg" invert={true} decimals={1} />
+                                                                    </div>
+                                                                    <div className={`p-3 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
+                                                                        <p className={`text-[10px] font-bold uppercase ${textSub} mb-1`}>Calorie Diff</p>
+                                                                        <DiffBadge value={cmp.calDiff} unit="kcal" invert={true} />
+                                                                    </div>
+                                                                    <div className={`p-3 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
+                                                                        <p className={`text-[10px] font-bold uppercase ${textSub} mb-1`}>Sugar Diff</p>
+                                                                        <DiffBadge value={cmp.sugarDiff} unit="g" invert={true} />
+                                                                    </div>
+                                                                    <div className={`p-3 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
+                                                                        <p className={`text-[10px] font-bold uppercase ${textSub} mb-1`}>Portions Diff</p>
+                                                                        <DiffBadge value={+(cmp.gramsDiff / 1000).toFixed(1)} unit="kg" decimals={1} />
+                                                                    </div>
+                                                                    <div className={`p-3 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#fbfdfa]'}`}>
+                                                                        <p className={`text-[10px] font-bold uppercase ${textSub} mb-1`}>Completion Diff</p>
+                                                                        <DiffBadge value={cmp.completionDiff} unit="%" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </motion.div>
                                             )}
@@ -1170,119 +1240,6 @@ const ViewHistory = () => {
                         </div>
                     )}
                 </motion.div>
-
-                {/* ════════ WEEK-TO-WEEK COMPARISON ════════ */}
-                {comparisons.length > 0 && (
-                    <motion.div variants={itemVariants}>
-                        <div className="flex items-center gap-3 mb-6">
-                            <TrendingUp size={18} className="text-[#f5c842]" />
-                            <h2 className="font-serif text-2xl italic">Week-to-Week Comparison</h2>
-                        </div>
-
-                        <div className="space-y-5">
-                            {comparisons.map((cmp, idx) => (
-                                <motion.div
-                                    key={idx}
-                                    initial={{ opacity: 0, y: 15 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: 0.2 + idx * 0.15 }}
-                                    className={`${cardBg} rounded-2xl border ${border} overflow-hidden`}
-                                >
-                                    {/* Comparison Header */}
-                                    <div className={`px-6 py-4 flex items-center justify-between ${darkMode ? 'bg-white/[0.03]' : 'bg-[#fbfdfa]'} border-b ${border}`}>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cmp.older.color }} />
-                                            <span className="text-xs font-black uppercase tracking-wider">{cmp.older.week}</span>
-                                            <span className={`text-xs ${textSub}`}>→</span>
-                                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cmp.newer.color }} />
-                                            <span className="text-xs font-black uppercase tracking-wider">{cmp.newer.week}</span>
-                                        </div>
-                                        <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
-                                            cmp.trajectory === 'improving' 
-                                                ? darkMode ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
-                                                : cmp.trajectory === 'declining'
-                                                ? darkMode ? 'bg-orange-500/15 text-orange-400' : 'bg-orange-50 text-orange-700'
-                                                : darkMode ? 'bg-white/10 text-white/60' : 'bg-black/5 text-black/50'
-                                        }`}>
-                                            {cmp.trajectory === 'improving' ? '↑ Improving' : cmp.trajectory === 'declining' ? '↓ Needs Attention' : '— Stable'}
-                                        </span>
-                                    </div>
-
-                                    {/* Comparison Grid */}
-                                    <div className="p-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                                        {/* Weight */}
-                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Scale size={13} className="text-[#8ecb84]" />
-                                                <p className={`text-xs font-bold uppercase ${textSub}`}>Weight</p>
-                                            </div>
-                                            {cmp.newer.weight ? (
-                                                <>
-                                                    <p className="text-lg font-bold">{cmp.newer.weight} <span className={`text-xs font-normal ${textSub}`}>kg</span></p>
-                                                    <div className="mt-1"><DiffBadge value={cmp.weightDiff} unit="kg" invert={true} decimals={1} /></div>
-                                                </>
-                                            ) : <p className={`text-sm ${textSub}`}>—</p>}
-                                        </div>
-
-                                        {/* BMI */}
-                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Heart size={13} className="text-[#f5c842]" />
-                                                <p className={`text-xs font-bold uppercase ${textSub}`}>BMI</p>
-                                            </div>
-                                            {cmp.newer.bmi ? (
-                                                <>
-                                                    <p className="text-lg font-bold">{typeof cmp.newer.bmi === 'number' ? cmp.newer.bmi.toFixed(1) : cmp.newer.bmi}</p>
-                                                    <div className="mt-1"><DiffBadge value={cmp.bmiDiff} invert={true} decimals={1} /></div>
-                                                </>
-                                            ) : <p className={`text-sm ${textSub}`}>—</p>}
-                                        </div>
-
-                                        {/* Daily Calories */}
-                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Flame size={13} className="text-[#ff7b72]" />
-                                                <p className={`text-xs font-bold uppercase ${textSub}`}>Daily Cal</p>
-                                            </div>
-                                            <p className="text-lg font-bold">{cmp.newer.dailyAvgCal} <span className={`text-xs font-normal ${textSub}`}>kcal</span></p>
-                                            <div className="mt-1"><DiffBadge value={cmp.calDiff} unit="" invert={true} /></div>
-                                        </div>
-
-                                        {/* Sugar */}
-                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Zap size={13} className="text-[#6ab8ff]" />
-                                                <p className={`text-xs font-bold uppercase ${textSub}`}>Sugar</p>
-                                            </div>
-                                            <p className="text-lg font-bold">{cmp.newer.totals.sugar} <span className={`text-xs font-normal ${textSub}`}>g</span></p>
-                                            <div className="mt-1"><DiffBadge value={cmp.sugarDiff} unit="g" invert={true} /></div>
-                                        </div>
-
-                                        {/* Portions */}
-                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Utensils size={13} className="text-[#fcb9aa]" />
-                                                <p className={`text-xs font-bold uppercase ${textSub}`}>Portions</p>
-                                            </div>
-                                            <p className="text-lg font-bold">{(cmp.newer.totals.grams / 1000).toFixed(1)} <span className={`text-xs font-normal ${textSub}`}>kg</span></p>
-                                            <div className="mt-1"><DiffBadge value={+(cmp.gramsDiff / 1000).toFixed(1)} unit="kg" decimals={1} /></div>
-                                        </div>
-
-                                        {/* Completion */}
-                                        <div className={`p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-[#f5faf4]'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Target size={13} className="text-[#a8d8ea]" />
-                                                <p className={`text-xs font-bold uppercase ${textSub}`}>Completion</p>
-                                            </div>
-                                            <p className="text-lg font-bold">{cmp.newer.completion} <span className={`text-xs font-normal ${textSub}`}>%</span></p>
-                                            <div className="mt-1"><DiffBadge value={cmp.completionDiff} unit="%" /></div>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
 
                 {/* ════════ INSIGHTS & MOTIVATION ════════ */}
                 {insightsAndMotivation && (
@@ -1346,17 +1303,17 @@ const ViewHistory = () => {
                                             {insightsAndMotivation.motivation}
                                         </p>
                                         {insightsAndMotivation.trajectory === 'improving' && (
-                                            <p className="text-white/70 text-sm mt-3 italic">
+                                            <p className="text-white/70 text-sm mt-3">
                                                 Your numbers prove it — you're on the right track. Don't stop now.
                                             </p>
                                         )}
                                         {insightsAndMotivation.trajectory === 'declining' && (
-                                            <p className="text-white/70 text-sm mt-3 italic">
+                                            <p className="text-white/70 text-sm mt-3">
                                                 A setback is a setup for a comeback. Adjust, refocus, and crush next week.
                                             </p>
                                         )}
                                         {insightsAndMotivation.trajectory === 'stable' && (
-                                            <p className="text-white/70 text-sm mt-3 italic">
+                                            <p className="text-white/70 text-sm mt-3">
                                                 Stability is strength. Maintain your routine and the results will follow.
                                             </p>
                                         )}
