@@ -22,7 +22,6 @@ const GenerateWeekly = () => {
     return [...DAYS.slice(jsDay), ...DAYS.slice(0, jsDay)];
   }, []);
 
-  // --- ORIGINAL LOGIC & STATE ---
   const [user] = useState(() => {
     const stored = localStorage.getItem('user');
     return stored ? JSON.parse(stored) : null;
@@ -281,6 +280,23 @@ const GenerateWeekly = () => {
         plan: weeklyPlan,
         currentPlanCompletion
       });
+
+      // Save health log
+      try {
+        await axios.post('http://localhost:5000/api/health/save', {
+          userId,
+          gender: formData.gender || 'male',
+          height: formData.height,
+          weight: formData.weight,
+          bmi: String(bmi),
+          goal: formData.goal || suggestion || 'maintain',
+          condition: formData.conditions || [],
+          age: formData.age || 25,
+          activity: formData.activity || 'moderate'
+        });
+      } catch (err) {
+        console.error("Failed to save health log:", err);
+      }
 
       // Clear the local progress checkboxes and day_done items for all days
       const daysList = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];

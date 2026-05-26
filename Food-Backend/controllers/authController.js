@@ -218,4 +218,65 @@ const deleteAccount = async (req, res) => {
     }
 };
 
-module.exports = { register, login, googleLogin, sendOTP, deleteAccount };
+// --- UPDATE PROFILE ---
+const updateProfile = async (req, res) => {
+    try {
+        const { uid } = req.params;
+        const { username, personalNarrative, email, profilePic } = req.body;
+        if (!uid) {
+            return res.status(400).json({ error: "User ID is required." });
+        }
+
+        const updateData = {};
+        if (username !== undefined) updateData.username = username;
+        if (personalNarrative !== undefined) updateData.personalNarrative = personalNarrative;
+        if (email !== undefined) updateData.email = email;
+        if (profilePic !== undefined) updateData.profilePic = profilePic;
+
+        // Guard: if nothing to update, return early
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: "No fields provided to update." });
+        }
+
+        // Update Firestore
+        await db.collection('users').doc(uid).update(updateData);
+
+        // Fetch updated user
+        const updatedDoc = await db.collection('users').doc(uid).get();
+        const updatedData = updatedDoc.data();
+
+        // Update Firebase Auth display name if username changed
+        if (username) {
+            await auth.updateUser(uid, {
+                displayName: username
+            });
+        }
+
+        res.status(200).json({ 
+            message: "Profile updated successfully.",
+            user: updatedData
+        });
+    } catch (error) {
+        console.error("Update Profile Error:", error);
+        res.status(500).json({ error: "Failed to update profile: " + error.message });
+    }
+};
+
+// --- GET PROFILE ---
+const getProfile = async (req, res) => {
+    try {
+        const { uid } = req.params;
+        if (!uid) return res.status(400).json({ error: "User ID missing" });
+
+        const doc = await db.collection('users').doc(uid).get();
+        if (!doc.exists) {
+            return res.status(404).json({ error: "User profile not found." });
+        }
+        res.status(200).json(doc.data());
+    } catch (error) {
+        console.error("Get Profile Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+module.exports = { register, login, googleLogin, sendOTP, deleteAccount, updateProfile, getProfile };

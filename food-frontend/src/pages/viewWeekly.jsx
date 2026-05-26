@@ -25,6 +25,7 @@ const ViewWeekly = () => {
     
     const standardDays = DAYS;
     const [orderedDays, setOrderedDays] = useState(standardDays);
+    const [planStartDate, setPlanStartDate] = useState(null);
 
     useEffect(() => {
         if (orderedDays && orderedDays.length > 0) {
@@ -60,6 +61,7 @@ const ViewWeekly = () => {
                     }
 
                     if (!isNaN(savedDate.getTime())) {
+                        setPlanStartDate(savedDate);
                         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
                         const startDayName = dayNames[savedDate.getDay()];
                         
@@ -128,6 +130,20 @@ const ViewWeekly = () => {
         });
         
         return totalItems > 0 && completedCount >= totalItems;
+    };
+
+    const isDayMissing = (dayName, idx) => {
+        // 1. If it's already complete, it's not missing!
+        if (isDayComplete(dayName)) return false;
+
+        // 2. Find today's index in the ordered 7-day rotation
+        const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        const todayIndex = orderedDays.indexOf(todayName);
+
+        if (todayIndex === -1) return false;
+
+        // If this day's index is before today's index in the rotation, it has passed
+        return idx < todayIndex;
     };
 
     // Render ingredients for the selected detailed view
@@ -244,7 +260,15 @@ const ViewWeekly = () => {
                                 <p className={`font-serif text-xl italic ${activeDayIdx === idx ? 'text-white' : textMain}`}>{day}</p>
                             </div>
 
-                            {isDayComplete(day) && <span className="absolute right-4 top-4 text-[#8ecb84]"><CheckCircle2 size={16} /></span>}
+                            {isDayComplete(day) ? (
+                                <span className="absolute right-4 top-4 text-[#8ecb84]"><CheckCircle2 size={16} /></span>
+                            ) : (
+                                isDayMissing(day, idx) && (
+                                    <span className="absolute right-4 top-4 text-red-500 bg-red-500/10 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider flex items-center gap-1 border border-red-500/20">
+                                        <X size={10} strokeWidth={3} /> Missing
+                                    </span>
+                                )
+                            )}
 
                             <div className={`relative z-10 p-2 rounded-lg transition-colors ${activeDayIdx === idx ? 'bg-[#2d5a27]' : 'bg-black/5 text-[#2d5a27]'}`}>
                                 {activeDayIdx === idx ? <Zap size={14} /> : <ChevronRight size={14} />}

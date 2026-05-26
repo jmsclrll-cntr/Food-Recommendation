@@ -31,4 +31,14 @@ router.post('/google-login', googleLogin); // Changed from '/google' to '/google
  */
 router.post('/delete', deleteAccount);
 
+/**
+ * @route   PUT /api/auth/update/:uid
+ */
+router.put('/update/:uid', require('../controllers/authController').updateProfile);
+
+/**
+ * @route   GET /api/auth/profile/:uid
+ */
+router.get('/profile/:uid', require('../controllers/authController').getProfile);
+
 module.exports = router;

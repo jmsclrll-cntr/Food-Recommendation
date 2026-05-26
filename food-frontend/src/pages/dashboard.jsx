@@ -13,6 +13,7 @@ import silverImg from '../achievements/silver.png';
 import goldImg from '../achievements/gold.png';
 import platinumImg from '../achievements/platinum.png';
 import diamondImg from '../achievements/diamond.png';
+import defaultTrophyImg from '../achievements/default_trophy.png';
 
 // Animation Variants
 const containerVariants = {
@@ -246,8 +247,45 @@ const Dashboard = () => {
     return Math.round((completedCount / totalItems) * 100);
   }, [completedItems, dailyDiet]);
 
-  const handleNav = (path) => {
-    navigate(path);
+  const [showOverwriteModal, setShowOverwriteModal] = useState(false);
+  const [generateCooldown, setGenerateCooldown] = useState(false);
+
+  const handleNav = async (path) => {
+    if (path === '/generate-weekly') {
+      if (generateCooldown) return;
+      setGenerateCooldown(true);
+      try {
+        const userId = user.id || user.uid || user._id;
+        const res = await axios.get(`http://localhost:5000/api/diets/weekly/${userId}`);
+        if (res.data && Object.keys(res.data).length > 0) {
+          setShowOverwriteModal(true);
+          return;
+        }
+      } catch (e) {
+        // assume no plan
+      }
+      navigate(path);
+      setTimeout(() => setGenerateCooldown(false), 5000);
+    } else {
+      navigate(path);
+    }
+  };
+
+  const confirmOverwrite = async () => {
+    setShowOverwriteModal(false);
+    try {
+      const userId = user.id || user.uid || user._id;
+      await axios.delete(`http://localhost:5000/api/diets/weekly/${userId}`);
+      navigate('/generate-weekly');
+    } catch (e) {
+      // ignore
+    }
+    setTimeout(() => setGenerateCooldown(false), 5000);
+  };
+
+  const cancelOverwrite = () => {
+    setShowOverwriteModal(false);
+    setTimeout(() => setGenerateCooldown(false), 2000);
   };
 
   if (!user) return null;
@@ -319,10 +357,10 @@ const Dashboard = () => {
             <img
               src={
                 user.profilePic ||
-                `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=500`
+                `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%236a9966" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
               }
               alt="Profile"
-              className="relative w-full h-full object-cover rounded-full border-2 border-white shadow-sm"
+              className="relative w-full h-full object-cover rounded-full border-2 border-white shadow-sm p-2 bg-neutral-100 dark:bg-neutral-800"
             />
 
             <div className="absolute bottom-0 right-0 bg-[#2d5a27] p-1.5 rounded-full text-white border-2 border-white">
@@ -371,7 +409,7 @@ const Dashboard = () => {
             completedDays >= 21 ? { label: 'Champion',    sub: 'You\'re on fire!', color: '#8ecb84', glow: 'rgba(142,203,132,0.22)', icon: '🥇', image: platinumImg } :
             completedDays >= 14 ? { label: 'Dedicated',   sub: 'Solid consistency!', color: '#6ab8ff', glow: 'rgba(106,184,255,0.18)', icon: '🥈', image: goldImg } :
             completedDays >= 7  ? { label: 'Consistent',  sub: 'Building momentum!', color: '#a8d8ea', glow: 'rgba(168,216,234,0.15)', icon: '🥉', image: silverImg } :
-                                  { label: 'Beginner',    sub: 'Keep going!', color: '#8ecb84', glow: 'rgba(142,203,132,0.1)',  icon: '💧', image: bronzeImg };
+                                  { label: 'Beginner',    sub: 'Keep going!', color: '#8ecb84', glow: 'rgba(142,203,132,0.1)',  icon: '💧', image: defaultTrophyImg };
 
           // Calculate progress within the current 7-day cycle
           const currentCycleProgress = completedDays % 7 === 0 && completedDays > 0 ? 7 : completedDays % 7;
@@ -750,6 +788,60 @@ const Dashboard = () => {
           </div>
         </motion.div>
       </motion.main>
+
+      {/* OVERWRITE VALIDATION MODAL */}
+      <AnimatePresence>
+        {showOverwriteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={cancelOverwrite}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            
+            {/* Modal Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className={`relative w-full max-w-md p-8 rounded-2xl border backdrop-blur-xl shadow-2xl ${
+                darkMode 
+                  ? 'bg-neutral-900/90 border-white/10 text-white' 
+                  : 'bg-white/95 border-black/10 text-neutral-900'
+              }`}
+            >
+              <h3 className="font-serif text-2xl mb-3 text-center">
+                Overwrite Diet Plan?
+              </h3>
+              <p className={`text-sm text-center mb-8 leading-relaxed ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                A weekly diet plan already exists in your protocol database. Overwriting will permanently discard it.
+              </p>
+              <div className="flex gap-4">
+                <button
+                  onClick={cancelOverwrite}
+                  className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] rounded-lg transition-all ${
+                    darkMode
+                      ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                      : 'bg-black/5 hover:bg-black/10 border border-black/10'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmOverwrite}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 text-[10px] font-bold uppercase tracking-[0.2em] rounded-lg transition-all"
+                >
+                  Overwrite
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;

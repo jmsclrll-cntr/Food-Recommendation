@@ -50,19 +50,37 @@ exports.saveHealthProfile = async (req, res) => {
 
 exports.getHealthProfile = async (req, res) => {
     const db = admin.firestore();
+    const { userId } = req.params;
     try {
-        const { userId } = req.params;
         const snapshot = await db.collection('health_logs')
             .where('userId', '==', userId)
-            .limit(1)
             .get();
 
         if (snapshot.empty) {
             return res.status(404).json({ message: "No data found" });
         }
 
-        const data = snapshot.docs[0].data();
-        res.status(200).json(data);
+        const docs = [];
+        snapshot.forEach(doc => docs.push(doc.data()));
+
+        // Sort ascending by createdAt so newer logs overwrite older logs
+        docs.sort((a, b) => {
+            const timeA = a.createdAt ? (a.createdAt._seconds || new Date(a.createdAt).getTime() / 1000) : 0;
+            const timeB = b.createdAt ? (b.createdAt._seconds || new Date(b.createdAt).getTime() / 1000) : 0;
+            return timeA - timeB; // Ascending
+        });
+
+        // Merge all historical logs to ensure no missing fields
+        let mergedData = {};
+        docs.forEach(d => {
+            Object.keys(d).forEach(key => {
+                if (d[key] !== undefined && d[key] !== null && d[key] !== '') {
+                    mergedData[key] = d[key];
+                }
+            });
+        });
+
+        res.status(200).json(mergedData);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -85,17 +103,27 @@ exports.updateHealthData = async (req, res) => {
         const tdeeVal = calculateTdee(parsedWeight, parsedHeight, parsedAge, gender, activeActivity);
         const targetVal = calculateTargetCalories(parseFloat(bmi), gender, goal, parsedWeight, parsedHeight, parsedAge, activeActivity);
 
-        // 1. Search for the user's log
+        // 1. Search for the user's logs and update the newest one
         const snapshot = await db.collection('health_logs')
             .where('userId', '==', userId)
-            .limit(1) 
             .get();
 
         if (snapshot.empty) {
             return res.status(404).json({ error: "No profile found to update" });
         }
 
-        const docId = snapshot.docs[0].id;
+        let newestDoc = null;
+        let maxTime = -1;
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const time = data.createdAt ? (data.createdAt._seconds || new Date(data.createdAt).getTime() / 1000) : 0;
+            if (time > maxTime) {
+                maxTime = time;
+                newestDoc = doc;
+            }
+        });
+
+        const docId = newestDoc.id;
 
         // 2. Perform the update
         await db.collection('health_logs').doc(docId).update({
