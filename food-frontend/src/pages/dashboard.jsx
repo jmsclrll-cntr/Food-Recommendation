@@ -250,22 +250,29 @@ const Dashboard = () => {
   const [showOverwriteModal, setShowOverwriteModal] = useState(false);
   const [generateCooldown, setGenerateCooldown] = useState(false);
 
-  const handleNav = async (path) => {
+  const handleNav = (path) => {
     if (path === '/generate-weekly') {
       if (generateCooldown) return;
       setGenerateCooldown(true);
-      try {
-        const userId = user.id || user.uid || user._id;
-        const res = await axios.get(`http://localhost:5000/api/diets/weekly/${userId}`);
-        if (res.data && Object.keys(res.data).length > 0) {
-          setShowOverwriteModal(true);
-          return;
-        }
-      } catch (e) {
-        // assume no plan
-      }
-      navigate(path);
-      setTimeout(() => setGenerateCooldown(false), 5000);
+
+      // Navigate immediately for snappy UX
+      const userId = user.id || user.uid || user._id;
+      axios.get(`http://localhost:5000/api/diets/weekly/${userId}`)
+        .then((res) => {
+          if (res.data && Object.keys(res.data).length > 0) {
+            // Plan exists — show overwrite confirmation
+            setShowOverwriteModal(true);
+            setTimeout(() => setGenerateCooldown(false), 2000);
+          } else {
+            navigate(path);
+            setTimeout(() => setGenerateCooldown(false), 3000);
+          }
+        })
+        .catch(() => {
+          // No plan or backend down — navigate directly
+          navigate(path);
+          setTimeout(() => setGenerateCooldown(false), 3000);
+        });
     } else {
       navigate(path);
     }

@@ -53,6 +53,7 @@ const GenerateWeekly = () => {
   const [allIngredients, setAllIngredients] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const allergyContainerRef = useRef(null);
+  const [showBackConfirmation, setShowBackConfirmation] = useState(false);
 
   const [formData, setFormData] = useState({
     gender: '', height: '', weight: '', age: '', goal: '', conditions: [], activity: ''
@@ -520,7 +521,7 @@ const GenerateWeekly = () => {
       {/* HEADER */}
       <header className="flex items-center justify-between mb-8 relative z-50">
         <div className="flex items-center gap-6">
-          <button onClick={() => navigate('/dashboard')} className={`text-[10px] font-bold uppercase tracking-[0.3em] ${textSub} hover:text-[#2d5a27] dark:hover:text-[#5cb351] flex items-center gap-2 transition-all`}>
+          <button onClick={() => setShowBackConfirmation(true)} className={`text-[10px] font-bold uppercase tracking-[0.3em] ${textSub} hover:text-[#2d5a27] dark:hover:text-[#5cb351] flex items-center gap-2 transition-all`}>
               <ArrowLeft size={14} /> Hub
           </button>
           <div className="text-left">
@@ -544,11 +545,18 @@ const GenerateWeekly = () => {
             {/* Input Card */}
             {!isSubmitted ? (
               <main className={`${cardBg} p-6 clay-card overflow-y-auto transition-colors custom-scrollbar flex-1`}>
-                <h3 className="font-serif text-3xl mb-6 italic">Biometrics</h3>
+                <motion.h3 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                  className="text-2xl font-black uppercase tracking-widest text-[#2d5a27] dark:text-[#8ecb84] mb-6"
+                >
+                  Biometrics
+                </motion.h3>
                 <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-2 gap-5">
                   <div className="space-y-1.5">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Gender</label>
+                    <label className={`text-base font-semibold ${textSub}`}>Gender</label>
                     <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className={`w-full h-10 ${darkMode ? 'bg-[#1a1c1a]' : 'bg-transparent'} border-b ${border} outline-none text-sm`} required>
                       <option className={optionStyles} value="" disabled>Select</option>
                       <option className={optionStyles} value="male">Male</option>
@@ -556,22 +564,22 @@ const GenerateWeekly = () => {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Age (yrs)</label>
+                    <label className={`text-base font-semibold ${textSub}`}>Age (yrs)</label>
                     <input type="number" placeholder="Age" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
                   </div>
                   <div className="space-y-1.5">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Height (cm)</label>
+                    <label className={`text-base font-semibold ${textSub}`}>Height (cm)</label>
                     <input type="number" placeholder="Height" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
                   </div>
                   <div className="space-y-1.5">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Weight (kg)</label>
+                    <label className={`text-base font-semibold ${textSub}`}>Weight (kg)</label>
                     <input type="number" placeholder="Weight" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className={`w-full h-10 bg-transparent border-b ${border} outline-none text-sm`} required />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-5">
                   <div className="space-y-1.5">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Activity Level</label>
+                    <label className={`text-base font-semibold ${textSub}`}>Activity Level</label>
                     <select value={formData.activity} onChange={e => setFormData({...formData, activity: e.target.value})} className={`w-full h-12 px-4 border ${border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`} required>
                       <option className={optionStyles} value="" disabled>Select</option>
                       <option className={optionStyles} value="sedentary">Sedentary (No Exercise)</option>
@@ -582,7 +590,7 @@ const GenerateWeekly = () => {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Goal</label>
+                    <label className={`text-base font-semibold ${textSub}`}>Goal</label>
                     <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className={`w-full h-12 px-4 border ${suggestion ? 'border-[#2d5a27] dark:border-[#5cb351]' : border} ${darkMode ? 'bg-[#1a1c1a]' : 'bg-white'} text-xs font-bold clay-input`} required>
                       <option className={optionStyles} value="" disabled>Select</option>
                       <option className={optionStyles} value="lose">Weight Loss {suggestion === 'lose' && '(most pick)'}</option>
@@ -594,7 +602,7 @@ const GenerateWeekly = () => {
 
                 {/* Health Conditions Section */}
                 <div className="space-y-3 pt-2">
-                   <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Health Conditions</label>
+                   <label className={`text-base font-semibold ${textSub}`}>Health Conditions</label>
                    <div className="flex flex-wrap gap-2">
                        {['Diabetes', 'Hypertension', 'Heart Disease'].map(cond => {
                           const val = cond.toLowerCase();
@@ -615,7 +623,7 @@ const GenerateWeekly = () => {
                 {/* Allergy Filter Section */}
                 <div ref={allergyContainerRef} className="space-y-4 pt-4 border-t border-white/5 relative">
                   <div className="flex items-center justify-between">
-                    <label className={`text-[9px] font-bold uppercase tracking-widest ${textSub}`}>Allergies & Excluded Ingredients</label>
+                    <label className={`text-base font-semibold ${textSub}`}>Allergies & Excluded Ingredients</label>
                     <span className="text-[8px] font-bold uppercase px-2 py-0.5 bg-[#2d5a27]/10 dark:bg-[#5cb351]/10 text-[#2d5a27] dark:text-[#5cb351] rounded-full">Allergen Filter</span>
                   </div>
                   
@@ -699,8 +707,13 @@ const GenerateWeekly = () => {
               </form>
             </main>
             ) : (
-              <div className={`${cardBg} p-6 clay-card flex flex-col transition-colors flex-shrink-0 mb-4`}>
-                <h3 className="font-serif text-2xl mb-6 italic text-center">Your Biometrics</h3>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className={`${cardBg} p-8 clay-card transition-colors`}
+              >
+                <h3 className="text-xl font-black uppercase tracking-widest text-[#2d5a27] dark:text-[#8ecb84] mb-6 text-center">Your Biometrics</h3>
                 
                 <div className="flex flex-col gap-y-5 mb-8 px-2 w-full">
                   <div className="flex justify-between items-center border-b border-white/5 pb-3">
@@ -772,16 +785,16 @@ const GenerateWeekly = () => {
                     {isSaving ? 'Saving...' : 'Save Plan'}
                   </button>
                 </div>
-              </div>
+              </motion.div>
             )}
             {/* AI INSIGHT CARD */}
             <div className="mt-6 pb-2 flex-shrink-0">
-              <div className="bg-[#4a8a43] dark:bg-[#6bcf5f] p-5 text-white flex flex-col justify-center transition-colors clay-card">
-                <div className="flex items-center gap-2 mb-2">
-                    <Info size={12} className="text-white/80" />
-                    <h4 className="text-[8px] font-black uppercase tracking-widest text-white/70">AI Insight</h4>
+              <div className="bg-[#2d5a27] dark:bg-[#1c3a1c] p-6 text-white flex flex-col justify-center transition-colors rounded-2xl shadow-lg border border-[#8ecb84]/20 clay-card">
+                <div className="flex items-center gap-2 mb-3">
+                    <Info size={16} className="text-[#8ecb84]" />
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#8ecb84]">AI Insight</h4>
                 </div>
-                <p className="text-[10px] leading-relaxed italic opacity-90">
+                <p className="text-sm font-medium leading-relaxed text-white">
                     {generateInsight()}
                 </p>
               </div>
@@ -1065,6 +1078,62 @@ const GenerateWeekly = () => {
                     </motion.div>
                   ))}
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* BACK TO DASHBOARD CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {showBackConfirmation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[999] bg-black/80 flex items-center justify-center p-6"
+            onClick={() => setShowBackConfirmation(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+              className={`${cardBg} w-full max-w-sm p-8 rounded-[24px] border ${border} text-center shadow-2xl flex flex-col items-center gap-6 clay-card relative`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-[#2d5a27]/10 dark:bg-[#5cb351]/10 p-5 rounded-full text-[#2d5a27] dark:text-[#5cb351]">
+                <ArrowLeft size={28} />
+              </div>
+              
+              <div>
+                <h3 className={`font-serif text-2xl font-semibold ${textMain} mb-2 leading-tight`}>
+                  Leave Page?
+                </h3>
+                <p className={`text-[10px] leading-relaxed uppercase tracking-wider ${textSub}`}>
+                  Any unsaved changes to your weekly meal plan suggestion will be discarded.
+                </p>
+              </div>
+              
+              <div className="flex gap-4 w-full">
+                <button
+                  onClick={() => setShowBackConfirmation(false)}
+                  className={`flex-1 py-3.5 border ${border} rounded-xl font-bold text-[9px] uppercase tracking-[0.2em] transition-all ${
+                    darkMode ? 'text-white hover:bg-white/5' : 'text-[#1c3a1c] hover:bg-black/5'
+                  } active:scale-[0.98] clay-btn`}
+                >
+                  Stay
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBackConfirmation(false);
+                    navigate('/dashboard');
+                  }}
+                  className="flex-1 py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-[9px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] shadow-lg shadow-red-600/20"
+                >
+                  Leave
+                </button>
               </div>
             </motion.div>
           </motion.div>

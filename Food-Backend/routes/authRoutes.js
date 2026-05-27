@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 
 // 1. Destructure the functions from the controller
-const { register, login, googleLogin, sendOTP, deleteAccount } = require('../controllers/authController');
+const { register, login, googleLogin, sendOTP, deleteAccount, forgotPasswordSendOTP, resetPasswordWithOTP } = require('../controllers/authController');
 
 /**
  * @route   POST /api/auth/send-otp
@@ -25,6 +25,16 @@ router.post('/login', login);
  * @desc    MODIFIED: Added '-login' to match your Frontend request
  */
 router.post('/google-login', googleLogin); // Changed from '/google' to '/google-login'
+
+/**
+ * @route   POST /api/auth/forgot-password-send-otp
+ */
+router.post('/forgot-password-send-otp', forgotPasswordSendOTP);
+
+/**
+ * @route   POST /api/auth/reset-password-with-otp
+ */
+router.post('/reset-password-with-otp', resetPasswordWithOTP);
 
 /**
  * @route   POST /api/auth/delete

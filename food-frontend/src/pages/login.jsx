@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff, Moon, Sun, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Moon, Sun, CheckCircle2, ArrowLeft, Key } from 'lucide-react';
 import axios from 'axios';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
@@ -34,8 +34,102 @@ const Login = () => {
   const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
 
+  // FORGOT PASSWORD STATE
+  const [isForgotMode, setIsForgotMode] = useState(false);
+  const [forgotStep, setForgotStep] = useState('request'); // 'request' | 'reset'
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
   // DARK MODE LOGIC
   const [darkMode, toggleDarkMode] = useDarkMode();
+
+  // Handle countdown for resending code
+  useEffect(() => {
+    let interval;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
+  const handleForgotSendOTP = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const response = await axios.post('http://localhost:5000/api/auth/forgot-password-send-otp', { email: forgotEmail });
+      showNotification(response.data.message, "success");
+      
+      if (response.data.devCode) {
+        console.log(`[Forgot Password OTP Dev Code]: ${response.data.devCode}`);
+        showNotification(`[DEV ONLY] Verification code is: ${response.data.devCode}`, "info");
+      }
+      
+      setForgotStep('reset');
+      setResendTimer(60);
+    } catch (err) {
+      showNotification(err.response?.data?.error || "Failed to send verification code.", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      showNotification("Passwords do not match.", "error");
+      return;
+    }
+    if (newPassword.length < 6) {
+      showNotification("Password must be at least 6 characters.", "error");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const response = await axios.post('http://localhost:5000/api/auth/reset-password-with-otp', {
+        email: forgotEmail,
+        otp,
+        newPassword
+      });
+      showNotification(response.data.message, "success");
+      setIsForgotMode(false);
+      setForgotStep('request');
+      setEmail(forgotEmail);
+      setForgotEmail('');
+      setOtp('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      showNotification(err.response?.data?.error || "Failed to reset password.", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (resendTimer > 0) return;
+    setIsLoading(true);
+    try {
+      const response = await axios.post('http://localhost:5000/api/auth/forgot-password-send-otp', { email: forgotEmail });
+      showNotification("A new verification code has been sent.", "success");
+      if (response.data.devCode) {
+        console.log(`[Forgot Password OTP Dev Code]: ${response.data.devCode}`);
+        showNotification(`[DEV ONLY] New code: ${response.data.devCode}`, "info");
+      }
+      setResendTimer(60);
+    } catch (err) {
+      showNotification(err.response?.data?.error || "Failed to resend code.", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (notification) {
@@ -194,71 +288,235 @@ const Login = () => {
         {/* Right Panel */}
         <div className="flex-1 p-8 md:p-12 flex flex-col justify-center transition-colors duration-500">
           <div className="max-w-md mx-auto w-full">
-            <h2 className={`font-serif text-3xl ${textMain} mb-1 transition-colors`}>Welcome Back</h2>
-            <p className={`text-sm ${textSub} mb-8 italic transition-colors`}>Premium Nutrition</p>
+            {!isForgotMode ? (
+              <>
+                <h2 className={`font-serif text-3xl ${textMain} mb-1 transition-colors`}>Welcome Back</h2>
+                <p className={`text-sm ${textSub} mb-8 italic transition-colors`}>Premium Nutrition</p>
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Email address</label>
-                <div className="relative group">
-                  <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
-                  <input 
-                    type="email" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    placeholder="Email" 
-                    required 
-                    className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
-                  />
-                </div>
-              </div>
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Email address</label>
+                    <div className="relative group">
+                      <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                      <input 
+                        type="email" 
+                        value={email} 
+                        onChange={(e) => setEmail(e.target.value)} 
+                        placeholder="Email" 
+                        required 
+                        className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Password</label>
-                <div className="relative group">
-                  <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                    placeholder="••••••••" 
-                    required 
-                    className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
-                  >
-                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Password</label>
+                    <div className="relative group">
+                      <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        value={password} 
+                        onChange={(e) => setPassword(e.target.value)} 
+                        placeholder="••••••••" 
+                        required 
+                        className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input`} 
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
+                      >
+                        {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                      </button>
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForgotEmail(email); // Prefill if they already entered their email
+                          setIsForgotMode(true);
+                          setForgotStep('request');
+                        }}
+                        className={`text-[10px] font-bold uppercase tracking-widest hover:underline transition-all ${darkMode ? 'text-[#8ecb84]/80 hover:text-[#8ecb84]' : 'text-[#2d5a27]/80 hover:text-[#2d5a27]'}`}
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn mt-4">
+                    Sign In →
                   </button>
+                </form>
+
+                <div className="flex items-center gap-4 py-6">
+                  <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
+                  <span className="text-[10px] font-bold text-[#b0a898] tracking-widest uppercase">OR</span>
+                  <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
                 </div>
-              </div>
 
-              <button type="submit" className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn mt-4">
-                Sign In →
-              </button>
-            </form>
+                <button 
+                  onClick={handleGoogle} 
+                  className={`w-full h-12 ${darkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#c8c2b8] hover:bg-[#f5faf4]'} border-2 rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6 clay-btn`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.6-6.6C35.4 2.7 30 .5 24 .5 14.7.5 6.7 6.1 3 14l7.8 6c1.9-5.5 7-9.5 13.2-9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.6A14.4 14.4 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.5 13.4A23.5 23.5 0 0 0 .5 24c0 3.8.9 7.4 2.5 10.6l7.8-6z"/><path fill="#34A853" d="M24 47.5c6 0 11-2 14.7-5.3l-7.5-5.8c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.4-4.2-13.2-9.9l-7.8 6C6.6 41.9 14.7 47.5 24 47.5z"/>
+                  </svg>
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-white/80' : 'text-gray-400'}`}>Continue with Google</span>
+                </button>
 
-            <div className="flex items-center gap-4 py-6">
-              <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
-              <span className="text-[10px] font-bold text-[#b0a898] tracking-widest uppercase">OR</span>
-              <div className={`h-[1px] flex-1 ${darkMode ? 'bg-white/10' : 'bg-[#e4dfd5]'}`} />
-            </div>
+                <p className="text-center text-[9px] text-gray-400 font-bold uppercase tracking-widest">
+                  New Here? <Link to="/signup" className="text-[#2d5a27] font-black hover:underline transition-all">Register</Link>
+                </p>
+              </>
+            ) : (
+              <>
+                {forgotStep === 'request' ? (
+                  <>
+                    <h2 className={`font-serif text-3xl ${textMain} mb-1 transition-colors`}>Reset Password</h2>
+                    <p className={`text-sm ${textSub} mb-8 italic transition-colors`}>Enter your registered email address to receive a verification OTP.</p>
 
-            <button 
-              onClick={handleGoogle} 
-              className={`w-full h-12 ${darkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#c8c2b8] hover:bg-[#f5faf4]'} border-2 rounded-xl flex items-center justify-center gap-3 transition-all duration-200 group mb-6 clay-btn`}
-            >
-              <svg width="18" height="18" viewBox="0 0 48 48">
-                <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.6-6.6C35.4 2.7 30 .5 24 .5 14.7.5 6.7 6.1 3 14l7.8 6c1.9-5.5 7-9.5 13.2-9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.6A14.4 14.4 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.5 13.4A23.5 23.5 0 0 0 .5 24c0 3.8.9 7.4 2.5 10.6l7.8-6z"/><path fill="#34A853" d="M24 47.5c6 0 11-2 14.7-5.3l-7.5-5.8c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.4-4.2-13.2-9.9l-7.8 6C6.6 41.9 14.7 47.5 24 47.5z"/>
-              </svg>
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-white/80' : 'text-gray-400'}`}>Continue with Google</span>
-            </button>
+                    <form onSubmit={handleForgotSendOTP} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Email address</label>
+                        <div className="relative group">
+                          <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                          <input 
+                            type="email" 
+                            value={forgotEmail} 
+                            onChange={(e) => setForgotEmail(e.target.value)} 
+                            placeholder="Email" 
+                            required 
+                            disabled={isLoading}
+                            className={`w-full h-12 pl-11 pr-4 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input disabled:opacity-50`} 
+                          />
+                        </div>
+                      </div>
 
-            <p className="text-center text-[9px] text-gray-400 font-bold uppercase tracking-widest">
-              New Here? <Link to="/signup" className="text-[#2d5a27] font-black hover:underline transition-all">Register</Link>
-            </p>
+                      <button 
+                        type="submit" 
+                        disabled={isLoading}
+                        className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn mt-6 disabled:opacity-50"
+                      >
+                        {isLoading ? 'Sending Code...' : 'Send Verification Code →'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsForgotMode(false)}
+                        disabled={isLoading}
+                        className={`w-full h-12 border ${border} rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group mt-4 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-[#1c3a1c]/80 hover:bg-black/5'} disabled:opacity-50`}
+                      >
+                        <ArrowLeft size={16} /> Back to Sign In
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <h2 className={`font-serif text-3xl ${textMain} mb-1 transition-colors`}>Verify & Reset</h2>
+                    <p className={`text-sm ${textSub} mb-6 italic transition-colors`}>We've sent a 6-digit OTP code to <strong className="not-italic text-[#8ecb84]">{forgotEmail}</strong>.</p>
+
+                    <form onSubmit={handleResetPassword} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Verification Code (OTP)</label>
+                        <div className="relative group">
+                          <Key className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                          <input 
+                            type="text" 
+                            maxLength={6}
+                            value={otp} 
+                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} 
+                            placeholder="Enter 6-digit code" 
+                            required 
+                            disabled={isLoading}
+                            className={`w-full h-12 pl-11 pr-4 text-center tracking-[0.25em] font-mono text-base ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all ${textMain} clay-input disabled:opacity-50`} 
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>New Password</label>
+                        <div className="relative group">
+                          <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                          <input 
+                            type={showNewPassword ? "text" : "password"} 
+                            value={newPassword} 
+                            onChange={(e) => setNewPassword(e.target.value)} 
+                            placeholder="Min 6 characters" 
+                            required 
+                            disabled={isLoading}
+                            className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input disabled:opacity-50`} 
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
+                          >
+                            {showNewPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className={`text-[11px] font-bold uppercase tracking-widest ${textSub}`}>Confirm New Password</label>
+                        <div className="relative group">
+                          <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 transition-colors ${darkMode ? 'text-white/30' : 'text-[#1c3a1c]/40'} group-focus-within:text-[#8ecb84]`} />
+                          <input 
+                            type={showConfirmPassword ? "text" : "password"} 
+                            value={confirmPassword} 
+                            onChange={(e) => setConfirmPassword(e.target.value)} 
+                            placeholder="Confirm password" 
+                            required 
+                            disabled={isLoading}
+                            className={`w-full h-12 pl-11 pr-11 ${inputBg} border ${border} rounded-xl focus:border-[#8ecb84] focus:ring-4 focus:ring-[#8ecb84]/10 outline-none transition-all text-sm ${textMain} clay-input disabled:opacity-50`} 
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c3a1c]/40 hover:text-[#8ecb84] transition-colors focus:outline-none"
+                          >
+                            {showConfirmPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <button 
+                        type="submit" 
+                        disabled={isLoading}
+                        className="w-full h-12 bg-[#2d5a27] hover:bg-[#3d7a35] text-white rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 group clay-btn mt-6 disabled:opacity-50"
+                      >
+                        {isLoading ? 'Resetting Password...' : 'Reset Password →'}
+                      </button>
+
+                      <div className="flex items-center justify-between pt-2">
+                        <button
+                          type="button"
+                          onClick={handleResendOTP}
+                          disabled={resendTimer > 0 || isLoading}
+                          className={`text-[10px] font-bold uppercase tracking-widest transition-all ${
+                            resendTimer > 0 || isLoading
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : darkMode ? 'text-[#8ecb84] hover:underline' : 'text-[#2d5a27] hover:underline'
+                          }`}
+                        >
+                          {resendTimer > 0 ? `Resend Code (${resendTimer}s)` : 'Resend Code'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setForgotStep('request')}
+                          disabled={isLoading}
+                          className={`text-[10px] font-bold uppercase tracking-widest hover:underline transition-all ${
+                            darkMode ? 'text-white/60 hover:text-white' : 'text-[#1c3a1c]/60 hover:text-[#1c3a1c]'
+                          } disabled:opacity-50`}
+                        >
+                          Change Email
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

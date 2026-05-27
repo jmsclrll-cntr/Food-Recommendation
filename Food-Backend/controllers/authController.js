@@ -1,6 +1,6 @@
 const { auth, db } = require('../config/firebase'); 
 const axios = require('axios');
-const { sendOTPEmail } = require('../utils/emailService');
+const { sendOTPEmail, sendResetPasswordOTPEmail } = require('../utils/emailService');
 require('dotenv').config();
 
 // --- SEND OTP ---
@@ -279,4 +279,104 @@ const getProfile = async (req, res) => {
     }
 };
 
-module.exports = { register, login, googleLogin, sendOTP, deleteAccount, updateProfile, getProfile };
+// --- FORGOT PASSWORD SEND OTP ---
+const forgotPasswordSendOTP = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: "Email address is required." });
+        }
+
+        // Check if user exists in Firebase Auth
+        try {
+            await auth.getUserByEmail(email);
+        } catch (error) {
+            if (error.code === 'auth/user-not-found') {
+                return res.status(400).json({ error: "No account found with this email address." });
+            }
+            console.error("Firebase getUser Error:", error);
+            return res.status(500).json({ error: "Verification check failed: " + error.message });
+        }
+
+        // Generate 6-digit OTP code
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Save OTP to Firestore under 'forgot_password_otps'
+        await db.collection('forgot_password_otps').doc(email).set({
+            email,
+            otp,
+            createdAt: new Date().toISOString()
+        });
+
+        // Send Email
+        const result = await sendResetPasswordOTPEmail(email, otp);
+
+        res.status(200).json({
+            message: "A 6-digit verification code has been sent to your email address.",
+            method: result.method,
+            devCode: (result.method === 'console' || result.method === 'console_fallback') ? otp : undefined
+        });
+    } catch (error) {
+        console.error("Forgot Password OTP Error:", error);
+        res.status(500).json({ error: "Failed to send verification code: " + error.message });
+    }
+};
+
+// --- RESET PASSWORD WITH OTP ---
+const resetPasswordWithOTP = async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+
+        if (!email || !otp || !newPassword) {
+            return res.status(400).json({ error: "Email, verification code, and new password are required." });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: "Password must be at least 6 characters." });
+        }
+
+        // 1. Verify OTP
+        const otpDoc = await db.collection('forgot_password_otps').doc(email).get();
+        if (!otpDoc.exists) {
+            return res.status(400).json({ error: "No verification code requested or it has expired. Please request a new one." });
+        }
+
+        const otpData = otpDoc.data();
+        if (otpData.otp !== otp) {
+            return res.status(400).json({ error: "Invalid verification code. Please check your email." });
+        }
+
+        // Check expiry (10 minutes)
+        const expiryTime = 10 * 60 * 1000;
+        const timeElapsed = Date.now() - new Date(otpData.createdAt).getTime();
+        if (timeElapsed > expiryTime) {
+            return res.status(400).json({ error: "Verification code has expired. Please request a new one." });
+        }
+
+        // 2. Delete the verified OTP doc
+        await db.collection('forgot_password_otps').doc(email).delete();
+
+        // 3. Find user and update in Firebase Auth
+        const userRecord = await auth.getUserByEmail(email);
+        await auth.updateUser(userRecord.uid, { password: newPassword });
+
+        res.status(200).json({
+            message: "Password reset successfully! You can now sign in with your new password."
+        });
+    } catch (error) {
+        console.error("Reset Password Error:", error);
+        res.status(500).json({ error: "Failed to reset password: " + error.message });
+    }
+};
+
+module.exports = { 
+    register, 
+    login, 
+    googleLogin, 
+    sendOTP, 
+    deleteAccount, 
+    updateProfile, 
+    getProfile,
+    forgotPasswordSendOTP,
+    resetPasswordWithOTP
+};

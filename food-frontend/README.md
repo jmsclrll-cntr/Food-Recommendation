@@ -1,4 +1,9 @@
-# React + Vite
+# 🥗 NutriFind Frontend
+
+> [!NOTE]
+> This directory contains the React + Vite frontend application. For the complete CMSC 204 / CSEL 302 / ITEC 106 final project report and system documentation, please refer to the main [README.md](file:///C:/github/README.md) in the root directory.
+
+## React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
